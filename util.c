@@ -14,6 +14,7 @@ static i32 hadamard_12_12_transpose[] = {
 	1, -1,  1, -1, -1, -1,  1,  1,  1, -1,  1, -1,
 };
 
+#define zero_struct(s) mem_clear(s, 0, sizeof(*s));
 static void *
 mem_clear(void *p_, u8 c, size len)
 {
@@ -37,6 +38,14 @@ mem_move(u8 *src, u8 *dest, size n)
 	else            while (n) { n--; dest[n] = src[n]; }
 }
 
+
+static void
+arena_commit(Arena *a, size size)
+{
+	ASSERT(a->end - a->beg >= size);
+	a->beg += size;
+}
+
 #define alloc(a, t, n)    (t *)alloc_(a, sizeof(t), _Alignof(t), n)
 #define push_struct(a, t) (t *)alloc_(a, sizeof(t), _Alignof(t), 1)
 static void *
@@ -57,14 +66,15 @@ alloc_(Arena *a, size len, size align, size count)
 }
 
 static Arena
-sub_arena(Arena *a, size size)
+sub_arena(Arena *a, size len, size align)
 {
 	Arena result = {0};
-	if ((a->end - a->beg) >= size) {
-		result.beg  = a->beg;
-		result.end  = a->beg + size;
-		a->beg     += size;
-	}
+
+	size padding = -(uintptr_t)a->beg & (align - 1);
+	result.beg   = a->beg + padding;
+	result.end   = result.beg + len;
+	arena_commit(a, len + padding);
+
 	return result;
 }
 
@@ -246,11 +256,33 @@ stream_append_variable(Stream *s, Variable *var)
 	}
 }
 
+/* NOTE(rnp): FNV-1a hash */
+static u64
+s8_hash(s8 v)
+{
+	u64 h = 0x3243f6a8885a308d; /* digits of pi */
+	for (; v.len; v.len--) {
+		h ^= v.data[v.len - 1] & 0xFF;
+		h *= 1111111111111111111; /* random prime */
+	}
+	return h;
+}
+
 static s8
 cstr_to_s8(char *cstr)
 {
 	s8 result = {.data = (u8 *)cstr};
 	while (*cstr) { result.len++; cstr++; }
+	return result;
+}
+
+/* NOTE(rnp): returns < 0 if byte is not found */
+static size
+s8_scan_backwards(s8 s, u8 byte)
+{
+	size result = s.len;
+	while (result && s.data[result - 1] != byte) result--;
+	result--;
 	return result;
 }
 
@@ -260,7 +292,7 @@ s8_cut_head(s8 s, size cut)
 	s8 result = s;
 	if (cut > 0) {
 		result.data += cut;
-		result.len -= cut;
+		result.len  -= cut;
 	}
 	return result;
 }
