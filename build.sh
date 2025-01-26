@@ -59,22 +59,22 @@ mkdir -p external/lib
 
 build_raylib()
 {
-	cp external/raylib/src/raylib.h external/raylib/src/rlgl.h external/include/
+	cp external/raylib/src/rlgl.h external/include/
 	cppflags="${2} -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_43"
 	cppflags="${cppflags} -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include"
 
 	case ${1} in
 	shared)
 		${cc} ${cflags} ${cppflags} -fPIC -shared -DBUILD_LIBTYPE_SHARED \
-		        external/raylib/src/raudio.c external/raylib/src/rcore.c \
-		        external/raylib/src/rmodels.c external/raylib/src/rshapes.c \
-		        external/raylib/src/rtext.c external/raylib/src/rtextures.c \
-		        external/raylib/src/utils.c \
+		        external/rcore_extended.c \
+		        external/raylib/src/raudio.c external/raylib/src/rmodels.c \
+		        external/raylib/src/rshapes.c external/raylib/src/rtext.c \
+		        external/raylib/src/rtextures.c external/raylib/src/utils.c \
 			-o ${raylib}
 			;;
 	static)
+		${cc} ${cflags} ${cppflags} -c external/rcore_extended.c       -o external/lib/rcore.c.o
 		${cc} ${cflags} ${cppflags} -c external/raylib/src/raudio.c    -o external/lib/raudio.c.o
-		${cc} ${cflags} ${cppflags} -c external/raylib/src/rcore.c     -o external/lib/rcore.c.o
 		${cc} ${cflags} ${cppflags} -c external/raylib/src/rmodels.c   -o external/lib/rmodels.c.o
 		${cc} ${cflags} ${cppflags} -c external/raylib/src/rshapes.c   -o external/lib/rshapes.c.o
 		${cc} ${cflags} ${cppflags} -c external/raylib/src/rtext.c     -o external/lib/rtext.c.o
