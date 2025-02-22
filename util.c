@@ -121,31 +121,32 @@ stream_to_s8(Stream *s)
 }
 
 static void
+stream_append(Stream *s, void *data, size count)
+{
+	s->errors |= (s->cap - s->widx) < count;
+	if (!s->errors) {
+		mem_copy(data, s->data + s->widx, count);
+		s->widx += count;
+	}
+}
+
+static void
 stream_append_byte(Stream *s, u8 b)
 {
-	s->errors |= s->widx + 1 > s->cap;
-	if (!s->errors)
-		s->data[s->widx++] = b;
+	stream_append(s, &b, 1);
 }
 
 static void
 stream_append_s8(Stream *s, s8 str)
 {
-	s->errors |= (s->cap - s->widx) < str.len;
-	if (!s->errors) {
-		mem_copy(str.data, s->data + s->widx, str.len);
-		s->widx += str.len;
-	}
+	stream_append(s, str.data, str.len);
 }
 
 static void
 stream_append_s8_array(Stream *s, s8 *strs, size count)
 {
-	while (count > 0) {
-		stream_append_s8(s, *strs);
-		strs++;
-		count--;
-	}
+	for (size i = 0; i < count; i++)
+		stream_append(s, strs[i].data, strs[i].len);
 }
 
 static void
@@ -155,7 +156,7 @@ stream_append_u64(Stream *s, u64 n)
 	u8 *end = tmp + sizeof(tmp);
 	u8 *beg = end;
 	do { *--beg = '0' + (n % 10); } while (n /= 10);
-	stream_append_s8(s, (s8){.len = end - beg, .data = beg});
+	stream_append(s, beg, end - beg);
 }
 
 static void

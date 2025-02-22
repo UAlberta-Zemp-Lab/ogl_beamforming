@@ -48,7 +48,7 @@ gl_debug_logger(u32 src, u32 type, u32 id, u32 lvl, i32 len, const char *msg, co
 	case GL_DEBUG_SEVERITY_NOTIFICATION: stream_append_s8(e, s8("NOTIFICATION]: ")); break;
 	default:                             stream_append_s8(e, s8("INVALID]: "));      break;
 	}
-	stream_append_s8(e, (s8){.len = len, .data = (u8 *)msg});
+	stream_append(e, (char *)msg, len);
 	stream_append_byte(e, '\n');
 	os_write_err_msg(stream_to_s8(e));
 	e->widx = 0;
