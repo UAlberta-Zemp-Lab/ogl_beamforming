@@ -158,8 +158,8 @@ fill_frame_compute_work(BeamformerCtx *ctx, BeamformWork *work, ImagePlaneTag pl
 	b32 result = 0;
 	if (work) {
 		result = 1;
-		u32 frame_id    = atomic_inc_u32(&ctx->next_render_frame_index, 1);
-		u32 frame_index = frame_id % ARRAY_COUNT(ctx->beamform_frames);
+		u32 frame_id    = atomic_add_u32(&ctx->next_render_frame_index, 1);
+		u32 frame_index = frame_id % countof(ctx->beamform_frames);
 		work->type      = BW_COMPUTE;
 		work->frame     = ctx->beamform_frames + frame_index;
 		work->frame->ready_to_present = 0;
@@ -516,7 +516,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena arena, iptr gl_co
 			}
 		} break;
 		case BW_UPLOAD_BUFFER: {
-			ASSERT(!atomic_load((i32 *)(barrier_offset + work->completion_barrier)));
+			assert(!atomic_load_u32((i32 *)(barrier_offset + work->completion_barrier)));
 			BeamformerUploadContext *uc = &work->upload_context;
 			u32 tex_type, tex_format, tex_element_count, tex_1d = 0, buffer = 0;
 			switch (uc->kind) {
@@ -565,7 +565,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena arena, iptr gl_co
 			}
 		} break;
 		case BW_COMPUTE: {
-			atomic_store(&cs->processing_compute, 1);
+			atomic_store_u32(&cs->processing_compute, 1);
 			start_renderdoc_capture(gl_context);
 
 			BeamformComputeFrame *frame = work->frame;
@@ -623,7 +623,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena arena, iptr gl_co
 				/* TODO(rnp): not really sure what to do here */
 				mem_copy(&ctx->averaged_frames[aframe_index].stats.times,
 				         &frame->stats.times, sizeof(frame->stats.times));
-				atomic_inc_u32(&ctx->averaged_frame_index, 1);
+				atomic_add_u32(&ctx->averaged_frame_index, 1);
 			}
 			frame->ready_to_present = 1;
 			cs->processing_compute  = 0;
@@ -702,7 +702,7 @@ DEBUG_EXPORT BEAMFORMER_FRAME_STEP_FN(beamformer_frame_step)
 	BeamformerParameters *bp = &ctx->shared_memory->parameters;
 	if (ctx->shared_memory->dispatch_compute_sync) {
 		ImagePlaneTag current_plane = ctx->shared_memory->current_image_plane;
-		atomic_store(&ctx->shared_memory->dispatch_compute_sync, 0);
+		atomic_store_u32(&ctx->shared_memory->dispatch_compute_sync, 0);
 		BeamformWork *work = beamform_work_queue_push(ctx->beamform_work_queue);
 		if (work) {
 			if (fill_frame_compute_work(ctx, work, current_plane))

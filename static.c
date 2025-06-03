@@ -26,7 +26,7 @@ function FILE_WATCH_CALLBACK_FN(debug_reload)
 
 	/* NOTE(rnp): spin until compute thread finishes its work (we will probably
 	 * never reload while compute is in progress but just incase). */
-	while (!atomic_load(&os->compute_worker.asleep));
+	while (!atomic_load_u32(&os->compute_worker.asleep));
 
 	os_unload_library(debug_lib);
 	debug_lib = os_load_library(OS_DEBUG_LIB_NAME, OS_DEBUG_LIB_TEMP_NAME, &err);
@@ -242,12 +242,12 @@ function OS_THREAD_ENTRY_POINT_FN(compute_worker_thread_entry_point)
 
 	for (;;) {
 		for (;;) {
-			i32 current = atomic_load(&ctx->sync_variable);
-			if (current && atomic_swap(&ctx->sync_variable, 0) == current)
+			i32 expected = 1;
+			if (atomic_cas_u32(&ctx->sync_variable, &expected, 0))
 				break;
 
 			ctx->asleep = 1;
-			os_wait_on_value(&ctx->sync_variable, current, -1);
+			os_wait_on_value(&ctx->sync_variable, 0, -1);
 			ctx->asleep = 0;
 		}
 		beamformer_complete_compute(ctx->user_context, ctx->arena, ctx->gl_context);
@@ -328,7 +328,7 @@ setup_beamformer(BeamformerCtx *ctx, Arena *memory)
 #endif
 
 	#define X(name, type, size, gltype, glsize, comment) "\t" #gltype " " #name #glsize "; " comment "\n"
-	read_only local_persist s8 compute_parameters_header = s8(""
+	read_only local_persist s8 compute_parameters_header = s8_comp(""
 		"layout(std140, binding = 0) uniform parameters {\n"
 		BEAMFORMER_PARAMS_HEAD
 		BEAMFORMER_UI_PARAMS

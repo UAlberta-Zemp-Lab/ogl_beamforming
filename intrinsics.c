@@ -26,13 +26,17 @@
   #define debugbreak()  __debugbreak()
   #define unreachable() __assume(0)
 
-  #define atomic_store(ptr, n)     __atomic_store_n(ptr,    n, __ATOMIC_RELEASE)
-  #define atomic_load(ptr)         __atomic_load_n(ptr,        __ATOMIC_ACQUIRE)
-  #define atomic_swap(ptr, n)      __atomic_exchange_n(ptr, n, __ATOMIC_RELEASE)
-  #define atomic_and(ptr, n)       __atomic_and_fetch(ptr,  n, __ATOMIC_RELEASE)
-  #define atomic_add(ptr, n)       __atomic_add_fetch(ptr,  n, __ATOMIC_RELEASE)
-  #define atomic_inc_u32(ptr, n)   _InterlockedAdd((volatile u32 *)ptr,  n)
-  #define atomic_cas(ptr, cptr, n) __atomic_compare_exchange_n(ptr, cptr, n, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+  #define atomic_store_u32(ptr, n)     *((volatile u32 *)(ptr)) = (n)
+  #define atomic_load_u64(ptr)         *((volatile u64 *)(ptr))
+  #define atomic_load_u32(ptr)         *((volatile u32 *)(ptr))
+  #define atomic_and_u64(ptr, n)         _InterlockedAnd64((volatile u64 *)(ptr), (n))
+  #define atomic_add_u64(ptr, n)         _InterlockedAdd64((volatile u64 *)(ptr), (n))
+  #define atomic_add_u32(ptr, n)         _InterlockedAdd((volatile u32 *)(ptr), (n))
+  #define atomic_cas_u64(ptr, cptr, n)  (_InterlockedCompareExchange64((volatile u64 *)(ptr), *(cptr), (n)) == *(cptr))
+  #define atomic_cas_u32(ptr, cptr, n)  (_InterlockedCompareExchange((volatile u32 *)(ptr),   *(cptr), (n)) == *(cptr))
+
+  #define sqrt_f32(a)     sqrtf(a)
+  #define atan2_f32(y, x) atan2f(y, x)
 
 #else
   #define align_as(n)      __attribute__((aligned(n)))
@@ -47,19 +51,45 @@
   #endif
   #define unreachable() __builtin_unreachable()
 
-  #define atomic_store(ptr, n)     __atomic_store_n(ptr,    n, __ATOMIC_RELEASE)
-  #define atomic_load(ptr)         __atomic_load_n(ptr,        __ATOMIC_ACQUIRE)
-  #define atomic_swap(ptr, n)      __atomic_exchange_n(ptr, n, __ATOMIC_RELEASE)
-  #define atomic_and(ptr, n)       __atomic_and_fetch(ptr,  n, __ATOMIC_RELEASE)
-  #define atomic_add(ptr, n)       __atomic_add_fetch(ptr,  n, __ATOMIC_RELEASE)
-  #define atomic_inc_u32(ptr, n)   __atomic_fetch_add(ptr,  n, __ATOMIC_ACQ_REL)
-  #define atomic_cas(ptr, cptr, n) __atomic_compare_exchange_n(ptr, cptr, n, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+  #define atomic_store_u32(ptr, n)      __atomic_store_n(ptr,    n, __ATOMIC_RELEASE)
+  #define atomic_load_u64(ptr)          __atomic_load_n(ptr,        __ATOMIC_ACQUIRE)
+  #define atomic_and_u64(ptr, n)        __atomic_and_fetch(ptr,  n, __ATOMIC_RELEASE)
+  #define atomic_add_u64(ptr, n)        __atomic_fetch_add(ptr,  n, __ATOMIC_ACQ_REL)
+  #define atomic_cas_u64(ptr, cptr, n)  __atomic_compare_exchange_n(ptr, cptr, n, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+  #define atomic_add_u32                atomic_add_u64
+  #define atomic_cas_u32                atomic_cas_u64
+  #define atomic_load_u32               atomic_load_u64
+
+  #define sqrt_f32(a)     __builtin_sqrtf(a)
+  #define atan2_f32(y, x) __builtin_atan2f(y, x)
 
 #endif
 
-/* TODO(rnp): msvc probably won't build this but there are other things preventing that as well */
-#define sqrt_f32(a)     __builtin_sqrtf(a)
-#define atan2_f32(y, x) __builtin_atan2f(y, x)
+#if COMPILER_MSVC
+
+function force_inline u32
+clz_u32(u32 a)
+{
+	u32 result = 32, index;
+	if (a) {
+		_BitScanReverse(&index, a);
+		result = index;
+	}
+	return result;
+}
+
+function force_inline u32
+ctz_u32(u32 a)
+{
+	u32 result = 32, index;
+	if (a) {
+		_BitScanForward(&index, a);
+		result = index;
+	}
+	return result;
+}
+
+#else /* !COMPILER_MSVC */
 
 function force_inline u32
 clz_u32(u32 a)
@@ -76,6 +106,8 @@ ctz_u32(u32 a)
 	if (a) result = __builtin_ctz(a);
 	return result;
 }
+
+#endif
 
 #if ARCH_ARM64
 /* NOTE(rnp): we are only doing a handful of f32x4 operations so we will just use NEON and do

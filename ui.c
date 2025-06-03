@@ -948,14 +948,14 @@ add_beamformer_parameters_view(Variable *parent, BeamformerCtx *ctx)
 	                            &bp->off_axis_pos, (v2){.x = -1e3, .y = 1e3}, 0.25e3,
 	                            0.5e-3, V_INPUT|V_TEXT|V_CAUSES_COMPUTE, ui->font);
 
-	local_persist s8 beamform_plane_labels[] = {s8("XZ"), s8("YZ")};
+	read_only local_persist s8 beamform_plane_labels[] = {s8_comp("XZ"), s8_comp("YZ")};
 	add_variable_cycler(ui, group, &ui->arena, V_CAUSES_COMPUTE, ui->font, s8("Beamform Plane:"),
 	                    (u32 *)&bp->beamform_plane, beamform_plane_labels, countof(beamform_plane_labels));
 
 	add_beamformer_variable_f32(ui, group, &ui->arena, s8("F#:"), s8(""), &bp->f_number,
 	                            (v2){.y = 1e3}, 1, 0.1, V_INPUT|V_TEXT|V_CAUSES_COMPUTE, ui->font);
 
-	local_persist s8 true_false_labels[] = {s8("False"), s8("True")};
+	read_only local_persist s8 true_false_labels[] = {s8_comp("False"), s8_comp("True")};
 	add_variable_cycler(ui, group, &ui->arena, V_CAUSES_COMPUTE, ui->font, s8("Interpolate:"),
 	                    &bp->interpolate, true_false_labels, countof(true_false_labels));
 
@@ -1017,8 +1017,8 @@ add_beamformer_frame_view(BeamformerUI *ui, Variable *parent, Arena *arena,
 
 	switch (type) {
 	case FVT_LATEST: {
-		#define X(_type, _id, pretty) s8(pretty),
-		local_persist s8 labels[] = { IMAGE_PLANE_TAGS s8("Any") };
+		#define X(_type, _id, pretty) s8_comp(pretty),
+		read_only local_persist s8 labels[] = {IMAGE_PLANE_TAGS s8_comp("Any")};
 		#undef X
 		bv->cycler = add_variable_cycler(ui, menu, arena, 0, ui->small_font, s8("Live: "),
 		                                 &bv->cycler_state, labels, countof(labels));
@@ -1255,8 +1255,8 @@ lerp_v4(v4 a, v4 b, f32 t)
 function s8
 push_das_shader_kind(Stream *s, DASShaderKind shader, u32 transmit_count)
 {
-	#define X(type, id, pretty, fixed_tx) s8(pretty),
-	read_only local_persist s8 pretty_names[DASShaderKind_Count + 1] = {DAS_TYPES s8("Invalid")};
+	#define X(type, id, pretty, fixed_tx) s8_comp(pretty),
+	read_only local_persist s8 pretty_names[DASShaderKind_Count + 1] = {DAS_TYPES s8_comp("Invalid")};
 	#undef X
 	#define X(type, id, pretty, fixed_tx) fixed_tx,
 	read_only local_persist u8 fixed_transmits[DASShaderKind_Count + 1] = {DAS_TYPES 0};
@@ -1292,8 +1292,8 @@ push_custom_view_title(Stream *s, Variable *var)
 		switch (bv->type) {
 		case FVT_COPY: stream_append_s8(s, s8(": Copy [")); break;
 		case FVT_LATEST: {
-			#define X(plane, id, pretty) s8(": " pretty " ["),
-			local_persist s8 labels[IPT_LAST + 1] = { IMAGE_PLANE_TAGS s8(": Live [") };
+			#define X(plane, id, pretty) s8_comp(": " pretty " ["),
+			read_only local_persist s8 labels[IPT_LAST + 1] = {IMAGE_PLANE_TAGS s8_comp(": Live [")};
 			#undef X
 			stream_append_s8(s, labels[*bv->cycler->u.cycler.state % (IPT_LAST + 1)]);
 		} break;
@@ -1961,8 +1961,8 @@ draw_compute_progress_bar(BeamformerUI *ui, Arena arena, ComputeProgressBar *sta
 function v2
 draw_compute_stats_view(BeamformerCtx *ctx, Arena arena, ComputeShaderStats *stats, Rect r)
 {
-	#define X(e, n, s, h, pn) [ComputeShaderKind_##e] = s8(pn ":"),
-	read_only local_persist s8 labels[ComputeShaderKind_Count] = { COMPUTE_SHADERS };
+	#define X(e, n, s, h, pn) [ComputeShaderKind_##e] = s8_comp(pn ":"),
+	read_only local_persist s8 labels[ComputeShaderKind_Count] = {COMPUTE_SHADERS};
 	#undef X
 
 	BeamformerUI *ui     = ctx->ui;

@@ -250,9 +250,9 @@ beamformer_start_compute(u32 image_plane_tag)
 	b32 result = 0;
 	if (image_plane_tag < IPT_LAST) {
 		if (check_shared_memory()) {
-			if (atomic_load(&g_bp->dispatch_compute_sync) == 0) {
+			if (atomic_load_u32(&g_bp->dispatch_compute_sync) == 0) {
 				g_bp->current_image_plane = image_plane_tag;
-				atomic_store(&g_bp->dispatch_compute_sync, 1);
+				atomic_store_u32(&g_bp->dispatch_compute_sync, 1);
 				result = 1;
 			} else {
 				g_lib_last_error = BF_LIB_ERR_KIND_SYNC_VARIABLE;
@@ -398,7 +398,7 @@ send_data(void *data, u32 data_size)
 		if (result) {
 			/* TODO(rnp): should we just set timeout on acquiring the lock instead of this? */
 			try_wait_sync(&g_bp->raw_data_sync, -1, os_wait_on_value);
-			atomic_store(&g_bp->raw_data_sync, 1);
+			atomic_store_u32(&g_bp->raw_data_sync, 1);
 		}
 	}
 	return result;

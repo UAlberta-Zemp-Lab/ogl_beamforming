@@ -364,7 +364,7 @@ function OS_WAIT_ON_VALUE_FN(os_wait_on_value)
 function OS_WAKE_WAITERS_FN(os_wake_waiters)
 {
 	if (sync) {
-		atomic_inc_u32(sync, 1);
+		atomic_add_u32(sync, 1);
 		WakeByAddressAll(sync);
 	}
 }

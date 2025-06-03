@@ -275,7 +275,7 @@ function OS_WAIT_ON_VALUE_FN(os_wait_on_value)
 function OS_WAKE_WAITERS_FN(os_wake_waiters)
 {
 	if (sync) {
-		atomic_inc_u32(sync, 1);
+		atomic_store_u32(sync, 1);
 		syscall(SYS_futex, sync, FUTEX_WAKE, I32_MAX, 0, 0, 0);
 	}
 }

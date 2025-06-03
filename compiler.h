@@ -10,11 +10,11 @@
   #error Unsupported Operating System
 #endif
 
-#ifdef __clang__
+#if   defined(__clang__)
   #define COMPILER_CLANG 1
-#elif  _MSC_VER
+#elif defined(_MSC_VER)
   #define COMPILER_MSVC  1
-#elif  __GNUC__
+#elif defined(__GNUC__)
   #define COMPILER_GCC   1
 #else
   #error Unsupported Compiler

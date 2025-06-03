@@ -6,9 +6,9 @@ beamform_work_queue_pop(BeamformWorkQueue *q)
 {
 	BeamformWork *result = 0;
 
-	static_assert(ISPOWEROF2(ARRAY_COUNT(q->work_items)), "queue capacity must be a power of 2");
-	u64 val  = atomic_load(&q->queue);
-	u64 mask = ARRAY_COUNT(q->work_items) - 1;
+	static_assert(ISPOWEROF2(countof(q->work_items)), "queue capacity must be a power of 2");
+	u64 val  = atomic_load_u64(&q->queue);
+	u64 mask = countof(q->work_items) - 1;
 	u32 widx = val       & mask;
 	u32 ridx = val >> 32 & mask;
 
@@ -21,22 +21,22 @@ beamform_work_queue_pop(BeamformWorkQueue *q)
 function void
 beamform_work_queue_pop_commit(BeamformWorkQueue *q)
 {
-	atomic_add(&q->queue, 0x100000000ULL);
+	atomic_add_u64(&q->queue, 0x100000000ULL);
 }
 
 DEBUG_EXPORT BEAMFORM_WORK_QUEUE_PUSH_FN(beamform_work_queue_push)
 {
 	BeamformWork *result = 0;
 
-	static_assert(ISPOWEROF2(ARRAY_COUNT(q->work_items)), "queue capacity must be a power of 2");
-	u64 val  = atomic_load(&q->queue);
-	u64 mask = ARRAY_COUNT(q->work_items) - 1;
+	static_assert(ISPOWEROF2(countof(q->work_items)), "queue capacity must be a power of 2");
+	u64 val  = atomic_load_u64(&q->queue);
+	u64 mask = countof(q->work_items) - 1;
 	u32 widx = val       & mask;
 	u32 ridx = val >> 32 & mask;
 	u32 next = (widx + 1) & mask;
 
 	if (val & 0x80000000)
-		atomic_and(&q->queue, ~0x80000000);
+		atomic_and_u64(&q->queue, ~0x80000000);
 
 	if (next != ridx) {
 		result = q->work_items + widx;
@@ -48,7 +48,7 @@ DEBUG_EXPORT BEAMFORM_WORK_QUEUE_PUSH_FN(beamform_work_queue_push)
 
 DEBUG_EXPORT BEAMFORM_WORK_QUEUE_PUSH_COMMIT_FN(beamform_work_queue_push_commit)
 {
-	atomic_add(&q->queue, 1);
+	atomic_add_u64(&q->queue, 1);
 }
 
 function b32
@@ -56,8 +56,8 @@ try_wait_sync(i32 *sync, i32 timeout_ms, os_wait_on_value_fn *os_wait_on_value)
 {
 	b32 result = 0;
 	for (;;) {
-		i32 current = atomic_load(sync);
-		if (current && atomic_cas(sync, &current, 0)) {
+		i32 current = atomic_load_u32(sync);
+		if (current && atomic_cas_u32(sync, &current, 0)) {
 			result = 1;
 			break;
 		}

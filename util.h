@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "compiler.h"
+
 #ifndef asm
 #define asm __asm__
 #endif
@@ -14,19 +16,19 @@
 #endif
 
 #ifdef _DEBUG
-	#if OS_WINDOWS
-		#define DEBUG_EXPORT __declspec(dllexport)
-	#else
-		#define DEBUG_EXPORT
-	#endif
-	#define DEBUG_DECL(a) a
-	#define ASSERT(c) do { if (!(c)) debugbreak(); } while (0)
+  #if OS_WINDOWS
+    #define DEBUG_EXPORT __declspec(dllexport)
+  #else
+    #define DEBUG_EXPORT
+  #endif
+  #define DEBUG_DECL(a) a
+  #define assert(c) do { if (!(c)) debugbreak(); } while (0)
 #else
-	#define DEBUG_EXPORT function
-	#define DEBUG_DECL(a)
-	#define ASSERT(c)
+  #define DEBUG_EXPORT function
+  #define DEBUG_DECL(a)
+  #define assert(c)
 #endif
-#define assert ASSERT
+#define ASSERT assert
 
 #define INVALID_CODE_PATH ASSERT(0)
 #define INVALID_DEFAULT_CASE default: ASSERT(0); break
@@ -81,7 +83,7 @@
 
 #define I32_MAX          (0x7FFFFFFFL)
 #define U32_MAX          (0xFFFFFFFFUL)
-#define F32_INFINITY     (__builtin_inff())
+#define F32_INFINITY     (1e+300*1e+300)
 
 typedef char      c8;
 typedef uint8_t   u8;
@@ -106,6 +108,7 @@ typedef struct { Arena *arena; u8 *old_beg; } TempArena;
 
 typedef struct { iz len; u8 *data; } s8;
 #define s8(s) (s8){.len = ARRAY_COUNT(s) - 1, .data = (u8 *)s}
+#define s8_comp(s) {sizeof(s) - 1, (u8 *)s}
 
 typedef struct { iz len; u16 *data; } s16;
 
