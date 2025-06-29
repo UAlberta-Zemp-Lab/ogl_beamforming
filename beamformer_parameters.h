@@ -42,18 +42,18 @@ typedef struct {
 	X(HADAMARD, 1, "Hadamard")
 
 /* X(type, id, pretty name) */
-#define IMAGE_PLANE_TAGS \
+#define BEAMFORMER_VIEW_PLANE_TAG_LIST \
 	X(XZ,        0, "XZ")        \
 	X(YZ,        1, "YZ")        \
 	X(XY,        2, "XY")        \
-	X(ARBITRARY, 3, "Arbitrary")
+	X(Arbitrary, 3, "Arbitrary")
 
 typedef enum {
-	#define X(type, id, pretty) IPT_ ##type = id,
-	IMAGE_PLANE_TAGS
+	#define X(type, id, pretty) BeamformerViewPlaneTag_##type = id,
+	BEAMFORMER_VIEW_PLANE_TAG_LIST
 	#undef X
-	IPT_LAST
-} ImagePlaneTag;
+	BeamformerViewPlaneTag_Count,
+} BeamformerViewPlaneTag;
 
 /* X(type, id, pretty name, fixed transmits) */
 #define DAS_TYPES \
@@ -81,6 +81,9 @@ typedef enum {
 
 #define DAS_VOXEL_OFFSET_UNIFORM_LOC 2
 #define DAS_CYCLE_T_UNIFORM_LOC      3
+
+#define MIN_MAX_MIPS_LEVEL_UNIFORM_LOC 1
+#define SUM_PRESCALE_UNIFORM_LOC       1
 
 #define MAX_BEAMFORMED_SAVED_FRAMES 16
 #define MAX_COMPUTE_SHADER_STAGES   16

@@ -62,7 +62,7 @@ typedef struct {
 		BeamformerUploadContext  upload_context;
 		BeamformerExportContext  export_context;
 		ShaderReloadContext     *shader_reload_context;
-		ImagePlaneTag            compute_indirect_plane;
+		BeamformerViewPlaneTag   compute_indirect_plane;
 		void                    *generic;
 	};
 	BeamformerSharedMemoryLockKind lock;

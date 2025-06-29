@@ -160,7 +160,7 @@ push_compute_timing_info(ComputeTimingTable *t, ComputeTimingInfo info)
 }
 
 function b32
-fill_frame_compute_work(BeamformerCtx *ctx, BeamformWork *work, ImagePlaneTag plane)
+fill_frame_compute_work(BeamformerCtx *ctx, BeamformWork *work, BeamformerViewPlaneTag plane)
 {
 	b32 result = 0;
 	if (work) {
@@ -171,8 +171,8 @@ fill_frame_compute_work(BeamformerCtx *ctx, BeamformWork *work, ImagePlaneTag pl
 		work->lock      = BeamformerSharedMemoryLockKind_DispatchCompute;
 		work->frame     = ctx->beamform_frames + frame_index;
 		work->frame->ready_to_present = 0;
-		work->frame->frame.id = frame_id;
-		work->frame->image_plane_tag = plane;
+		work->frame->view_plane_tag   = plane;
+		work->frame->frame.id         = frame_id;
 	}
 	return result;
 }
@@ -186,7 +186,7 @@ do_sum_shader(ComputeShaderCtx *cs, u32 *in_textures, u32 in_texture_count, f32 
 	glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT);
 
 	glBindImageTexture(0, out_texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_RG32F);
-	glProgramUniform1f(cs->programs[BeamformerShaderKind_Sum], CS_SUM_PRESCALE_UNIFORM_LOC, in_scale);
+	glProgramUniform1f(cs->programs[BeamformerShaderKind_Sum], SUM_PRESCALE_UNIFORM_LOC, in_scale);
 	for (u32 i = 0; i < in_texture_count; i++) {
 		glBindImageTexture(1, in_textures[i], 0, GL_TRUE, 0, GL_READ_ONLY, GL_RG32F);
 		glDispatchCompute(ORONE(out_data_dim.x / 32),
@@ -325,7 +325,7 @@ do_compute_shader(BeamformerCtx *ctx, Arena arena, BeamformComputeFrame *frame, 
 		for (u32 i = 1; i < frame->frame.mips; i++) {
 			glBindImageTexture(0, texture, i - 1, GL_TRUE, 0, GL_READ_ONLY,  GL_RG32F);
 			glBindImageTexture(1, texture, i - 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RG32F);
-			glProgramUniform1i(csctx->programs[shader], CS_MIN_MAX_MIPS_LEVEL_UNIFORM_LOC, i);
+			glProgramUniform1i(csctx->programs[shader], MIN_MAX_MIPS_LEVEL_UNIFORM_LOC, i);
 
 			u32 width  = frame->frame.dim.x >> i;
 			u32 height = frame->frame.dim.y >> i;
@@ -440,11 +440,11 @@ shader_text_with_header(ShaderReloadContext *ctx, OS *os, Arena *arena)
 		#undef X
 	}break;
 	case BeamformerShaderKind_MinMax:{
-		stream_append_s8(&sb, s8("layout(location = " str(CS_MIN_MAX_MIPS_LEVEL_UNIFORM_LOC)
+		stream_append_s8(&sb, s8("layout(location = " str(MIN_MAX_MIPS_LEVEL_UNIFORM_LOC)
 		                         ") uniform int u_mip_map;\n\n"));
 	}break;
 	case BeamformerShaderKind_Sum:{
-		stream_append_s8(&sb, s8("layout(location = " str(CS_SUM_PRESCALE_UNIFORM_LOC)
+		stream_append_s8(&sb, s8("layout(location = " str(SUM_PRESCALE_UNIFORM_LOC)
 		                         ") uniform float u_sum_prescale = 1.0;\n\n"));
 	}break;
 	default:{}break;
@@ -530,7 +530,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena arena, iptr gl_co
 			if (success && ctx->csctx.raw_data_ssbo) {
 				/* TODO(rnp): this check seems off */
 				can_commit = 0;
-				fill_frame_compute_work(ctx, work, ctx->latest_frame->image_plane_tag);
+				fill_frame_compute_work(ctx, work, ctx->latest_frame->view_plane_tag);
 			}
 		}break;
 		case BeamformerWorkKind_ExportBuffer:{
@@ -686,7 +686,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena arena, iptr gl_co
 			frame->ready_to_present = 1;
 			if (did_sum_shader) {
 				u32 aframe_index = (ctx->averaged_frame_index % countof(ctx->averaged_frames));
-				ctx->averaged_frames[aframe_index].image_plane_tag  = frame->image_plane_tag;
+				ctx->averaged_frames[aframe_index].view_plane_tag  = frame->view_plane_tag;
 				ctx->averaged_frames[aframe_index].ready_to_present = 1;
 				atomic_add_u32(&ctx->averaged_frame_index, 1);
 				atomic_store_u64((u64 *)&ctx->latest_frame, (u64)(ctx->averaged_frames + aframe_index));
@@ -831,7 +831,7 @@ DEBUG_EXPORT BEAMFORMER_FRAME_STEP_FN(beamformer_frame_step)
 	if (sm->locks[BeamformerSharedMemoryLockKind_DispatchCompute] && ctx->os.compute_worker.asleep) {
 		if (sm->start_compute_from_main) {
 			BeamformWork *work = beamform_work_queue_push(ctx->beamform_work_queue);
-			ImagePlaneTag tag  = ctx->latest_frame->image_plane_tag;
+			BeamformerViewPlaneTag tag = ctx->latest_frame->view_plane_tag;
 			if (fill_frame_compute_work(ctx, work, tag))
 				beamform_work_queue_push_commit(ctx->beamform_work_queue);
 			atomic_store_u32(&sm->start_compute_from_main, 0);
@@ -840,7 +840,7 @@ DEBUG_EXPORT BEAMFORMER_FRAME_STEP_FN(beamformer_frame_step)
 	}
 
 	draw_ui(ctx, input, ctx->latest_frame->ready_to_present ? &ctx->latest_frame->frame : 0,
-	        ctx->latest_frame->image_plane_tag);
+	        ctx->latest_frame->view_plane_tag);
 
 	ctx->frame_view_render_context.updated = 0;
 

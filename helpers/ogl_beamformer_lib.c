@@ -264,7 +264,7 @@ beamformer_push_data_with_compute(void *data, u32 data_size, u32 image_plane_tag
 {
 	b32 result = beamformer_push_data_base(data, data_size, timeout_ms, 0);
 	if (result) {
-		result = image_plane_tag < IPT_LAST;
+		result = image_plane_tag < BeamformerViewPlaneTag_Count;
 		if (result) {
 			BeamformWork *work = try_push_work_queue();
 			result = work != 0;

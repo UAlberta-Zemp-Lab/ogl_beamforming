@@ -262,10 +262,11 @@ struct Variable {
 };
 
 typedef enum {
-	FVT_LATEST,
-	FVT_INDEXED,
-	FVT_COPY,
-} BeamformerFrameViewType;
+	BeamformerFrameViewKind_Latest,
+	BeamformerFrameViewKind_Indexed,
+	BeamformerFrameViewKind_Copy,
+	BeamformerFrameViewKind_3DXPlane,
+} BeamformerFrameViewKind;
 
 typedef struct BeamformerFrameView {
 	Variable lateral_scale_bar;
@@ -298,7 +299,7 @@ typedef struct BeamformerFrameView {
 	u32 texture_mipmaps;
 	u32 texture;
 
-	BeamformerFrameViewType type;
+	BeamformerFrameViewKind kind;
 	b32 needs_update;
 } BeamformerFrameView;
 
@@ -349,7 +350,7 @@ struct BeamformerUI {
 
 	v2_sll *scale_bar_savepoint_freelist;
 
-	BeamformFrame *latest_plane[IPT_LAST + 1];
+	BeamformFrame *latest_plane[BeamformerViewPlaneTag_Count + 1];
 
 	BeamformerUIParameters params;
 	b32                    flush_params;
@@ -783,27 +784,33 @@ push_custom_view_title(Stream *s, Variable *var)
 		stream_append_f64(s, 100 * *var->compute_progress_bar.progress, 100);
 		stream_append_byte(s, '%');
 	} break;
-	case VT_BEAMFORMER_FRAME_VIEW: {
+	case VT_BEAMFORMER_FRAME_VIEW:{
 		BeamformerFrameView *bv = var->generic;
 		stream_append_s8(s, s8("Frame View"));
-		switch (bv->type) {
-		case FVT_COPY: stream_append_s8(s, s8(": Copy [")); break;
-		case FVT_LATEST: {
+		switch (bv->kind) {
+		case BeamformerFrameViewKind_Copy:{ stream_append_s8(s, s8(": Copy [")); }break;
+		case BeamformerFrameViewKind_Latest:{
 			#define X(plane, id, pretty) s8_comp(": " pretty " ["),
-			read_only local_persist s8 labels[IPT_LAST + 1] = {IMAGE_PLANE_TAGS s8_comp(": Live [")};
+			read_only local_persist s8 labels[BeamformerViewPlaneTag_Count + 1] = {
+				BEAMFORMER_VIEW_PLANE_TAG_LIST
+				s8_comp(": Live [")
+			};
 			#undef X
-			stream_append_s8(s, labels[*bv->cycler->cycler.state % (IPT_LAST + 1)]);
-		} break;
-		case FVT_INDEXED: {
+			stream_append_s8(s, labels[*bv->cycler->cycler.state % (BeamformerViewPlaneTag_Count + 1)]);
+		}break;
+		case BeamformerFrameViewKind_Indexed:{
 			stream_append_s8(s, s8(": Index {"));
 			stream_append_u64(s, *bv->cycler->cycler.state % MAX_BEAMFORMED_SAVED_FRAMES);
 			stream_append_s8(s, s8("} ["));
-		} break;
+		}break;
+		case BeamformerFrameViewKind_3DXPlane:{ stream_append_s8(s, s8("3D Cross Plane")); }break;
 		}
-		stream_append_hex_u64(s, bv->frame? bv->frame->id : 0);
-		stream_append_byte(s, ']');
-	} break;
-	default: INVALID_CODE_PATH;
+		if (bv->kind != BeamformerFrameViewKind_3DXPlane) {
+			stream_append_hex_u64(s, bv->frame? bv->frame->id : 0);
+			stream_append_byte(s, ']');
+		}
+	}break;
+	InvalidDefaultCase;
 	}
 	return stream_to_s8(s);
 }
@@ -843,7 +850,7 @@ ui_variable_free(BeamformerUI *ui, Variable *var)
 				if (var->type == VT_BEAMFORMER_FRAME_VIEW) {
 					/* TODO(rnp): instead there should be a way of linking these up */
 					BeamformerFrameView *bv = var->generic;
-					if (bv->type == FVT_COPY) {
+					if (bv->kind == BeamformerFrameViewKind_Copy) {
 						glDeleteTextures(1, &bv->frame->texture);
 						bv->frame->texture = 0;
 						SLLPush(bv->frame, ui->frame_freelist);
@@ -1093,7 +1100,7 @@ add_beamformer_parameters_view(Variable *parent, BeamformerCtx *ctx)
 
 function Variable *
 add_beamformer_frame_view(BeamformerUI *ui, Variable *parent, Arena *arena,
-                          BeamformerFrameViewType type, b32 closable)
+                          BeamformerFrameViewKind kind, b32 closable)
 {
 	/* TODO(rnp): this can be always closable once we have a way of opening new views */
 	Variable *result = add_ui_view(ui, parent, arena, s8(""), UIViewFlag_CustomText, 1, closable);
@@ -1106,7 +1113,7 @@ add_beamformer_frame_view(BeamformerUI *ui, Variable *parent, Arena *arena,
 	DLLPushDown(bv, ui->views);
 
 	var->generic = bv;
-	bv->type     = type;
+	bv->kind     = kind;
 
 	fill_variable(&bv->dynamic_range, var, s8("Dynamic Range:"), V_INPUT|V_TEXT|V_UPDATE_VIEW,
 	              VT_F32, ui->small_font);
@@ -1138,20 +1145,20 @@ add_beamformer_frame_view(BeamformerUI *ui, Variable *parent, Arena *arena,
 	FRAME_VIEW_BUTTONS
 	#undef X
 
-	switch (type) {
-	case FVT_LATEST: {
+	switch (kind) {
+	case BeamformerFrameViewKind_Latest:{
 		#define X(_type, _id, pretty) s8_comp(pretty),
-		read_only local_persist s8 labels[] = {IMAGE_PLANE_TAGS s8_comp("Any")};
+		read_only local_persist s8 labels[] = {BEAMFORMER_VIEW_PLANE_TAG_LIST s8_comp("Any")};
 		#undef X
 		bv->cycler = add_variable_cycler(ui, menu, arena, 0, ui->small_font, s8("Live:"),
 		                                 &bv->cycler_state, labels, countof(labels));
-		bv->cycler_state = IPT_LAST;
-	} break;
-	case FVT_INDEXED: {
+		bv->cycler_state = BeamformerViewPlaneTag_Count;
+	}break;
+	case BeamformerFrameViewKind_Indexed:{
 		bv->cycler = add_variable_cycler(ui, menu, arena, 0, ui->small_font, s8("Index:"),
 		                                 &bv->cycler_state, 0, MAX_BEAMFORMED_SAVED_FRAMES);
-	} break;
-	default: break;
+	}break;
+	default:{}break;
 	}
 
 	bv->log_scale                = add_variable(ui, menu, arena, s8("Log Scale"),
@@ -1239,11 +1246,12 @@ function void
 ui_add_live_frame_view(BeamformerUI *ui, Variable *view, RegionSplitDirection direction)
 {
 	Variable *region = view->parent;
-	ASSERT(region->type == VT_UI_REGION_SPLIT);
-	ASSERT(view->type   == VT_UI_VIEW);
+	assert(region->type == VT_UI_REGION_SPLIT);
+	assert(view->type   == VT_UI_VIEW);
 
 	Variable *new_region = ui_split_region(ui, region, view, direction);
-	new_region->region_split.right = add_beamformer_frame_view(ui, new_region, &ui->arena, FVT_LATEST, 1);
+	new_region->region_split.right = add_beamformer_frame_view(ui, new_region, &ui->arena,
+	                                                           BeamformerFrameViewKind_Latest, 1);
 
 	ui_fill_live_frame_view(ui, new_region->region_split.right->group.first->generic);
 }
@@ -1252,8 +1260,8 @@ function void
 ui_copy_frame(BeamformerUI *ui, Variable *view, RegionSplitDirection direction)
 {
 	Variable *region = view->parent;
-	ASSERT(region->type == VT_UI_REGION_SPLIT);
-	ASSERT(view->type   == VT_UI_VIEW);
+	assert(region->type == VT_UI_REGION_SPLIT);
+	assert(view->type   == VT_UI_VIEW);
 
 	BeamformerFrameView *old = view->group.first->generic;
 	/* TODO(rnp): hack; it would be better if this was unreachable with a 0 old->frame */
@@ -1261,7 +1269,8 @@ ui_copy_frame(BeamformerUI *ui, Variable *view, RegionSplitDirection direction)
 		return;
 
 	Variable *new_region = ui_split_region(ui, region, view, direction);
-	new_region->region_split.right = add_beamformer_frame_view(ui, new_region, &ui->arena, FVT_COPY, 1);
+	new_region->region_split.right = add_beamformer_frame_view(ui, new_region, &ui->arena,
+	                                                           BeamformerFrameViewKind_Copy, 1);
 
 	BeamformerFrameView *bv = new_region->region_split.right->group.first->generic;
 	ScaleBar *lateral  = &bv->lateral_scale_bar.scale_bar;
@@ -1354,7 +1363,7 @@ ui_export_view(BeamformerUI *ui, Variable *view)
 function b32
 view_update(BeamformerUI *ui, BeamformerFrameView *view)
 {
-	if (view->type == FVT_LATEST) {
+	if (view->kind == BeamformerFrameViewKind_Latest) {
 		u32 index = *view->cycler->cycler.state;
 		view->needs_update |= view->frame != ui->latest_plane[index];
 		view->frame         = ui->latest_plane[index];
@@ -1368,7 +1377,7 @@ view_update(BeamformerUI *ui, BeamformerFrameView *view)
 	/* TODO(rnp): add method of setting a target size in frame view */
 	uv2 current = view->texture_dim;
 	uv2 target  = {.w = ui->params.output_points[0], .h = ui->params.output_points[2]};
-	if (view->type != FVT_COPY && !uv2_equal(current, target) && !uv2_equal(target, (uv2){0})) {
+	if (view->kind != BeamformerFrameViewKind_Copy && !uv2_equal(current, target) && !uv2_equal(target, (uv2){0})) {
 		resize_frame_view(view, target);
 		view->needs_update = 1;
 	}
@@ -3153,7 +3162,8 @@ ui_init(BeamformerCtx *ctx, Arena store)
 	                                             RSD_HORIZONTAL, ui->font);
 	split->region_split.left    = add_ui_split(ui, split, &ui->arena, s8(""), 0.475,
 	                                           RSD_VERTICAL, ui->font);
-	split->region_split.right   = add_beamformer_frame_view(ui, split, &ui->arena, FVT_LATEST, 0);
+	split->region_split.right   = add_beamformer_frame_view(ui, split, &ui->arena,
+	                                                        BeamformerFrameViewKind_Latest, 0);
 
 	ui_fill_live_frame_view(ui, split->region_split.right->view.child->generic);
 
@@ -3182,13 +3192,13 @@ validate_ui_parameters(BeamformerUIParameters *p)
 }
 
 function void
-draw_ui(BeamformerCtx *ctx, BeamformerInput *input, BeamformFrame *frame_to_draw, ImagePlaneTag frame_plane)
+draw_ui(BeamformerCtx *ctx, BeamformerInput *input, BeamformFrame *frame_to_draw, BeamformerViewPlaneTag frame_plane)
 {
 	BeamformerUI *ui = ctx->ui;
 	BeamformerSharedMemory *sm = ctx->shared_memory.region;
 
-	ui->latest_plane[IPT_LAST]    = frame_to_draw;
-	ui->latest_plane[frame_plane] = frame_to_draw;
+	ui->latest_plane[BeamformerViewPlaneTag_Count] = frame_to_draw;
+	ui->latest_plane[frame_plane]                  = frame_to_draw;
 
 	/* TODO(rnp): there should be a better way of detecting this */
 	if (ctx->ui_read_params) {

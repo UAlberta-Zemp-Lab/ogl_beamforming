@@ -73,8 +73,6 @@ typedef struct {
 #include "beamformer_parameters.h"
 #include "beamformer_work_queue.h"
 
-#define CS_MIN_MAX_MIPS_LEVEL_UNIFORM_LOC 1
-#define CS_SUM_PRESCALE_UNIFORM_LOC       1
 
 typedef struct {
 	u32 programs[BeamformerShaderKind_ComputeCount];
@@ -163,8 +161,8 @@ typedef struct BeamformFrame {
 
 struct BeamformComputeFrame {
 	BeamformFrame frame;
-	ImagePlaneTag image_plane_tag;
 	b32           ready_to_present;
+	BeamformerViewPlaneTag view_plane_tag;
 };
 
 #define GL_PARAMETERS \
