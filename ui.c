@@ -197,7 +197,8 @@ typedef struct {
 /* X(id, text) */
 #define FRAME_VIEW_BUTTONS \
 	X(FV_COPY_HORIZONTAL, "Copy Horizontal") \
-	X(FV_COPY_VERTICAL,   "Copy Vertical")
+	X(FV_COPY_VERTICAL,   "Copy Vertical")   \
+	X(FV_EXPORT,          "Export Bitmap")
 
 #define GLOBAL_MENU_BUTTONS \
 	X(GM_OPEN_LIVE_VIEW_RIGHT,   "Open Live View Right")    \
@@ -1518,6 +1519,59 @@ render_3D_xplane(BeamformerUI *ui, BeamformerFrameView *view, u32 program)
 	render_single_xplane(ui, view, view->x_plane_shifts + 1, program,
 	                     x_plane_rotation_for_view_plane(view, BeamformerViewPlaneTag_YZ),
 	                     model_translate, BeamformerViewPlaneTag_YZ);
+}
+
+#include <stdlib.h>
+function void
+ui_export_view(BeamformerUI *ui, Variable *view)
+{
+	assert(view->type == VT_UI_VIEW);
+
+	u8 buffer[1024];
+
+	BeamformerFrameView *bv = view->group.first->generic;
+	if (!bv->frame)
+		return;
+
+	Stream buf  = arena_stream(ui->arena);
+	Stream path = {.data = buffer, .cap = sizeof(buffer)};
+
+	v4 min = bv->frame->min_coordinate, max = bv->frame->max_coordinate;
+
+	stream_append_s8(&path, s8("/tmp/downloads/"));
+	push_das_shader_kind(&path, bv->frame->das_shader_kind, bv->frame->compound_count);
+	stream_append_byte(&path, '_');
+	stream_append_hex_u64(&path, bv->frame->id);
+	iz pidx = path.widx;
+	stream_append_s8(&path, s8("_params.csv"));
+	stream_append_byte(&path, 0);
+
+	stream_append_s8(&buf, s8("min_coord,max_coord,size,dynamic_range\n"));
+	stream_append_f64(&buf, min.x, 1000); stream_append_byte(&buf, ',');
+	stream_append_f64(&buf, max.x, 1000); stream_append_byte(&buf, ',');
+	stream_append_u64(&buf, bv->texture_dim.w); stream_append_byte(&buf, ',');
+	stream_append_f64(&buf, bv->dynamic_range.real32, 100);
+	stream_append_byte(&buf, '\n');
+	stream_append_f64(&buf, min.z, 1000); stream_append_byte(&buf, ',');
+	stream_append_f64(&buf, max.z, 1000); stream_append_byte(&buf, ',');
+	stream_append_u64(&buf, bv->texture_dim.h); stream_append_byte(&buf, ',');
+	stream_append_byte(&buf, '\n');
+	if (!ui->os->write_new_file((c8 *)path.data, stream_to_s8(&buf)))
+		ui->os->write_file(ui->os->error_handle, s8("failed to export view parameters\n"));
+
+	stream_reset(&path, pidx);
+	stream_append_s8(&path, s8(".bin"));
+	stream_append_byte(&path, 0);
+
+	iz out_size = bv->texture_dim.h * bv->texture_dim.w * sizeof(u32);
+	void *out_buf = malloc(out_size);
+	if (out_buf) {
+		glGetTextureImage(bv->textures[0], 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8, out_size, out_buf);
+		s8 raw = {.len = out_size, .data = out_buf};
+		if (!ui->os->write_new_file((c8 *)path.data, raw))
+			ui->os->write_file(ui->os->error_handle, s8("failed to export view\n"));
+		free(out_buf);
+	}
 }
 
 function b32
@@ -3133,6 +3187,7 @@ ui_button_interaction(BeamformerUI *ui, Variable *button)
 {
 	assert(button->type == VT_UI_BUTTON);
 	switch (button->button) {
+	case UI_BID_FV_EXPORT:{ ui_export_view(ui, button->parent->parent); }break;
 	case UI_BID_VIEW_CLOSE:{ ui_view_close(ui, button->parent); }break;
 	case UI_BID_FV_COPY_HORIZONTAL:{
 		ui_copy_frame(ui, button->parent->parent, RSD_HORIZONTAL);
