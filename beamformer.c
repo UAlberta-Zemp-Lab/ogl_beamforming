@@ -167,7 +167,7 @@ alloc_shader_storage(BeamformerCtx *ctx, u32 rf_raw_size, Arena a)
 	u32 storage_flags = GL_DYNAMIC_STORAGE_BIT;
 	glDeleteBuffers(1, &cs->raw_data_ssbo);
 	glCreateBuffers(1, &cs->raw_data_ssbo);
-	glNamedBufferStorage(cs->raw_data_ssbo, 2 * rf_raw_size, 0, storage_flags);
+	glNamedBufferStorage(cs->raw_data_ssbo, rf_raw_size, 0, storage_flags);
 	LABEL_GL_OBJECT(GL_BUFFER, cs->raw_data_ssbo, s8("Raw_RF_SSBO"));
 
 	uz rf_decoded_size = 2 * sizeof(f32) * cs->dec_data_dim.x * cs->dec_data_dim.y * cs->dec_data_dim.z;
@@ -509,8 +509,7 @@ do_compute_shader(BeamformerCtx *ctx, Arena arena, BeamformerComputeFrame *frame
 	case BeamformerShaderKind_DecodeFloatComplex:
 	case BeamformerShaderKind_DecodeInt16ToFloat:
 	{
-		glBindBufferBase(GL_UNIFORM_BUFFER,        0, cp->ubos[BeamformerComputeUBOKind_Decode]);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, csctx->rf_data_ssbos[output_ssbo_idx]);
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, cp->ubos[BeamformerComputeUBOKind_Decode]);
 		glBindImageTexture(0, csctx->hadamard_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8I);
 
 		/* NOTE(rnp): decode 2 samples per dispatch when data is i16 */
@@ -519,24 +518,23 @@ do_compute_shader(BeamformerCtx *ctx, Arena arena, BeamformerComputeFrame *frame
 			local_size_x *= 2;
 
 		uv3 dim = csctx->dec_data_dim.xyz;
-		iz raw_size = csctx->rf_raw_size;
 		if (shader == cp->shaders[0]) {
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, csctx->raw_data_ssbo);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, csctx->rf_data_ssbos[input_ssbo_idx]);
 			glBindImageTexture(1, csctx->channel_mapping_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R16I);
 			glProgramUniform1ui(program, DECODE_FIRST_PASS_UNIFORM_LOC, 1);
-			glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 1, csctx->raw_data_ssbo, 0,        raw_size);
-			glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 2, csctx->raw_data_ssbo, raw_size, raw_size);
+
 			glDispatchCompute((u32)ceil_f32((f32)dim.x / local_size_x),
 			                  (u32)ceil_f32((f32)dim.y / DECODE_LOCAL_SIZE_Y),
 			                  (u32)ceil_f32((f32)dim.z / DECODE_LOCAL_SIZE_Z));
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		}
 
-		if (shader == cp->shaders[0]) {
-			glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 1, csctx->raw_data_ssbo, raw_size, raw_size);
-		} else {
+		if (shader != cp->shaders[0])
 			dim = uv4_from_u32_array(cp->das_ubo_data.dec_data_dim).xyz;
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, csctx->rf_data_ssbos[input_ssbo_idx]);
-		}
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, csctx->rf_data_ssbos[input_ssbo_idx]);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, csctx->rf_data_ssbos[output_ssbo_idx]);
 
 		glProgramUniform1ui(program, DECODE_FIRST_PASS_UNIFORM_LOC, 0);
 		glDispatchCompute((u32)ceil_f32((f32)dim.x / local_size_x),
@@ -558,13 +556,10 @@ do_compute_shader(BeamformerCtx *ctx, Arena arena, BeamformerComputeFrame *frame
 	case BeamformerShaderKind_DemodulateFloat:
 	{
 		BeamformerDemodulateUBO *ubo = &cp->demod_ubo_data;
+		u32 input = ubo->map_channels ? csctx->raw_data_ssbo : csctx->rf_data_ssbos[input_ssbo_idx];
 		glBindBufferBase(GL_UNIFORM_BUFFER,        0, cp->ubos[BeamformerComputeUBOKind_Demodulate]);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, input);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, csctx->rf_data_ssbos[output_ssbo_idx]);
-		if (shader == cp->shaders[0]) {
-			glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 1, csctx->raw_data_ssbo, 0, csctx->rf_raw_size);
-		} else {
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, csctx->rf_data_ssbos[input_ssbo_idx]);
-		}
 
 		glBindImageTexture(0, csctx->filters[sp->filter_slot].texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
 		if (ubo->map_channels)
