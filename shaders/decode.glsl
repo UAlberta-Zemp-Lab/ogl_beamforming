@@ -28,11 +28,15 @@
 	#define SAMPLE_TYPE_CAST(x)  vec2(((x) << 16) >> 16, (x) >> 16)
 #else
 	#define INPUT_DATA_TYPE      int
-	#define RF_SAMPLES_PER_INDEX 2
 	#define RESULT_TYPE_CAST(x)  (x)
-	#define SAMPLE_DATA_TYPE     vec4
 	/* NOTE(rnp): for i16 rf_data we decode 2 samples at once */
-	#define SAMPLE_TYPE_CAST(x)  vec4(((x) << 16) >> 16, 0, (x) >> 16, 0)
+	#define RF_SAMPLES_PER_INDEX 2
+	#define SAMPLE_DATA_TYPE     vec4
+	#if defined(OUTPUT_DATA_TYPE_FLOAT)
+		#define SAMPLE_TYPE_CAST(x)  vec4(((x) << 16) >> 16, (x) >> 16, 0, 0)
+	#else
+		#define SAMPLE_TYPE_CAST(x)  vec4(((x) << 16) >> 16, 0, (x) >> 16, 0)
+	#endif
 #endif
 
 layout(std430, binding = 1) readonly restrict buffer buffer_1 {
@@ -69,6 +73,9 @@ void main()
 		              input_sample_stride   * time_sample;
 		out_rf_data[rf_offset + transmit] = rf_data[in_off / RF_SAMPLES_PER_INDEX];
 	} else {
+		#if defined(OUTPUT_DATA_TYPE_FLOAT)
+		time_sample  = gl_GlobalInvocationID.x;
+		#endif
 		uint out_off = output_channel_stride  * channel +
 		               output_transmit_stride * transmit +
 		               output_sample_stride   * time_sample;
@@ -86,7 +93,7 @@ void main()
 		} break;
 		}
 		out_data[out_off + 0] = result.xy;
-		#if RF_SAMPLES_PER_INDEX == 2
+		#if RF_SAMPLES_PER_INDEX == 2 && !defined(OUTPUT_DATA_TYPE_FLOAT)
 		out_data[out_off + 1] = result.zw;
 		#endif
 	}
