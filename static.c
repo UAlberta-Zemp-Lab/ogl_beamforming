@@ -98,6 +98,7 @@ load_gl(Stream *err)
 {
 	#define X(name, ret, params) name = (name##_fn *)os_gl_proc_address(#name);
 	OGLProcedureList
+	OGLRequiredExtensionProcedureList
 	#undef X
 
 	/* NOTE: Gather information about the GPU */
@@ -167,6 +168,7 @@ load_gl(Stream *err)
 
 		#define X(name, ret, params) if (!name) stream_append_s8(err, s8("missing required GL function: " #name "\n"));
 		OGLProcedureList
+		OGLRequiredExtensionProcedureList
 		#undef X
 
 		if (err->widx) os_fatal(stream_to_s8(err));
