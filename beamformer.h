@@ -2,11 +2,15 @@
 #ifndef _BEAMFORMER_H_
 #define _BEAMFORMER_H_
 
+// TODO: remove all these includes
+
 #include "util.h"
 #include "opengl.h"
 
 #include "generated/beamformer.meta.c"
 #include "generated/beamformer_shaders.c"
+
+#include "beamformer_internal.h"
 
 #include <raylib_extended.h>
 #include <rlgl.h>
@@ -14,6 +18,7 @@
 ///////////////////
 // REQUIRED OS API
 function void os_barrier_wait(Barrier);
+function void os_release_handle(Handle);
 function iptr os_error_handle(void);
 function s8   os_path_separator(void);
 function OS_READ_WHOLE_FILE_FN(os_read_whole_file);
@@ -21,6 +26,8 @@ function OS_SHARED_MEMORY_LOCK_REGION_FN(os_shared_memory_region_lock);
 function OS_SHARED_MEMORY_UNLOCK_REGION_FN(os_shared_memory_region_unlock);
 function OS_WAKE_WAITERS_FN(os_wake_waiters);
 function OS_WRITE_FILE_FN(os_write_file);
+
+#define BEAMFORMER_NAME_STRING "OGL Beamformer"
 
 #include "threads.c"
 #include "util_gl.c"
@@ -188,20 +195,26 @@ struct BeamformerComputePlan {
 };
 
 typedef struct {
-	GLsync upload_syncs[BeamformerMaxRawDataFramesInFlight];
-	GLsync compute_syncs[BeamformerMaxRawDataFramesInFlight];
+	// NOTE(rnp): w32 doesn't transfer ownership of these when they are imported
+	// into the driver. For now just store them here, this code won't be around for long
+	Handle       upload_semaphores_handles[BeamformerMaxRawDataFramesInFlight];
+	VulkanHandle vk_upload_semaphores[BeamformerMaxRawDataFramesInFlight];
+	u32          gl_upload_semaphores[BeamformerMaxRawDataFramesInFlight];
 
-	u8 *buffer;
+	GLsync       compute_syncs[BeamformerMaxRawDataFramesInFlight];
 
-	u32 ssbo;
+	u64          uploaded_data_indices[BeamformerMaxRawDataFramesInFlight];
 
-	u32 size;
+	GPUBuffer buffer;
+	Handle    export_handle;
+
+	u32 ssbo, memory_object;
+
 	u32 active_rf_size;
-
 	u32 data_timestamp_query;
 
-	u32 insertion_index;
-	u32 compute_index;
+	u64 insertion_index;
+	u64 compute_index;
 } BeamformerRFBuffer;
 
 typedef struct {

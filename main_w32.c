@@ -29,6 +29,10 @@
 
 #define OS_RENDERDOC_SONAME    "renderdoc.dll"
 
+#define OS_VULKAN_SONAME_LIST \
+	X("vulkan-1.dll") \
+
+
 iptr glfwGetWGLContext(iptr);
 function iptr
 os_get_native_gl_context(iptr window)

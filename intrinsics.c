@@ -23,8 +23,11 @@
   #define pack_struct(s) __pragma(pack(push, 1)) s __pragma(pack(pop))
   #define no_return      __declspec(noreturn)
 
-  #define debugbreak()  __debugbreak()
-  #define unreachable() __assume(0)
+  #define likely(x)      (x)
+  #define unlikely(x)    (x)
+
+  #define debugbreak()   __debugbreak()
+  #define unreachable()  __assume(0)
 
   #if ARCH_ARM64
     #define cpu_yield() __yield()
@@ -60,6 +63,9 @@
   #define alignas(n)       __attribute__((aligned(n)))
   #define pack_struct(s) s __attribute__((packed))
   #define no_return        __attribute__((noreturn))
+
+  #define likely(x)        (__builtin_expect(!!(x), 1))
+  #define unlikely(x)      (__builtin_expect(!!(x), 0))
 
   #if ARCH_ARM64
     /* TODO? debuggers just loop here forever and need a manual PC increment (step over) */

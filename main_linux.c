@@ -17,6 +17,11 @@
 
 #define OS_RENDERDOC_SONAME    "librenderdoc.so"
 
+#define OS_VULKAN_SONAME_LIST \
+	X("libvulkan.so") \
+	X("libvulkan.so.1") \
+
+
 /* TODO(rnp): what do if not X11? */
 iptr glfwGetGLXContext(iptr);
 function iptr

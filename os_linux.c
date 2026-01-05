@@ -44,11 +44,12 @@ typedef struct {
 global OSLinux_Context os_linux_context;
 
 #ifdef _DEBUG
-function void *
+function Handle
 os_get_module(char *name, Stream *e)
 {
-	void *result = dlopen(name, RTLD_NOW|RTLD_LOCAL|RTLD_NOLOAD);
-	if (!result && e) {
+	void *module = dlopen(name, RTLD_NOW|RTLD_LOCAL|RTLD_NOLOAD);
+	Handle result = module ? (Handle){(u64)module} : InvalidHandle;
+	if (!module && e) {
 		stream_append_s8s(e, s8("os_get_module(\""), c_str_to_s8(name), s8("\"): "),
 		                  c_str_to_s8(dlerror()), s8("\n"));
 	}
@@ -211,7 +212,7 @@ os_copy_file(char *name, char *new)
 	return result;
 }
 
-function void *
+function Handle
 os_load_library(char *name, char *temp_name, Stream *e)
 {
 	if (temp_name) {
@@ -219,8 +220,9 @@ os_load_library(char *name, char *temp_name, Stream *e)
 			name = temp_name;
 	}
 
-	void *result = dlopen(name, RTLD_NOW|RTLD_LOCAL);
-	if (!result && e) {
+	void *library = dlopen(name, RTLD_NOW|RTLD_LOCAL);
+	Handle result = library ? (Handle){(u64)library} : InvalidHandle;
+	if (!library && e) {
 		stream_append_s8s(e, s8("os_load_library(\""), c_str_to_s8(name), s8("\"): "),
 		                  c_str_to_s8(dlerror()), s8("\n"));
 	}
@@ -232,11 +234,11 @@ os_load_library(char *name, char *temp_name, Stream *e)
 }
 
 function void *
-os_lookup_dynamic_symbol(void *h, char *name, Stream *e)
+os_lookup_dynamic_symbol(Handle h, char *name, Stream *e)
 {
 	void *result = 0;
-	if (h) {
-		result = dlsym(h, name);
+	if ValidHandle(h) {
+		result = dlsym((void *)h.value[0], name);
 		if (!result && e) {
 			stream_append_s8s(e, s8("os_lookup_dynamic_symbol(\""), c_str_to_s8(name),
 			                  s8("\"): "), c_str_to_s8(dlerror()), s8("\n"));
@@ -246,11 +248,18 @@ os_lookup_dynamic_symbol(void *h, char *name, Stream *e)
 }
 
 function void
-os_unload_library(void *h)
+os_release_handle(Handle h)
+{
+	if ValidHandle(h)
+		close(h.value[0]);
+}
+
+function void
+os_unload_library(Handle h)
 {
 	/* NOTE: glibc is buggy gnuware so we need to check this */
-	if (h)
-		dlclose(h);
+	if ValidHandle(h)
+		dlclose((void *)h.value[0]);
 }
 
 function OSLinux_FileWatchDirectory *

@@ -101,6 +101,9 @@
 #define SIGN(x)          ((x) < 0? -1 : 1)
 #define swap(a, b)       do {typeof(a) __tmp = (a); (a) = (b); (b) = __tmp;} while(0)
 
+#define Min(a, b)        ((a) < (b) ? (a) : (b))
+#define Max(a, b)        ((a) > (b) ? (a) : (b))
+
 #define ISDIGIT(c)       (BETWEEN((c), '0', '9'))
 #define ISUPPER(c)       (((c) & 0x20u) == 0)
 #define TOLOWER(c)       (((c) | 0x20u))
@@ -124,12 +127,12 @@
 	iz    capacity; \
 } name ##List;
 
+#define SLLStackPush(list, n) ((n)->next = (list), (list) = (n))
+// TODO(rnp): clean this up
+#define SLLPush(v, list) SLLStackPush(list, v)
+
 /* NOTE(rnp): no guarantees about actually getting an element */
 #define SLLPop(list) list; list = list ? list->next : 0
-#define SLLPush(v, list) do { \
-	(v)->next = (list); \
-	(list)    = v;      \
-} while (0)
 
 #define SLLPopFreelist(list) list; do { \
 	asan_unpoison_region((list), sizeof(*(list))); \
@@ -156,7 +159,9 @@
 #define MB(a)            ((u64)(a) << 20ULL)
 #define GB(a)            ((u64)(a) << 30ULL)
 
+#define I8_MAX           (0x0000007FL)
 #define I32_MAX          (0x7FFFFFFFL)
+#define U8_MAX           (0x000000FFUL)
 #define U16_MAX          (0x0000FFFFUL)
 #define U32_MAX          (0xFFFFFFFFUL)
 #define U64_MAX          (0xFFFFFFFFFFFFFFFFULL)
@@ -167,6 +172,8 @@
 #endif
 
 typedef char      c8;
+typedef uint8_t   b8;
+typedef int8_t    i8;
 typedef uint8_t   u8;
 typedef int16_t   i16;
 typedef uint16_t  u16;
@@ -307,9 +314,9 @@ typedef struct {
 	b32   errors;
 } Stream;
 
-#define INVALID_FILE (-1)
-
-typedef struct OS OS;
+#define INVALID_FILE   (-1)
+#define InvalidHandle  (Handle){(u64)(-1)}
+#define ValidHandle(h) ((h).value[0] != InvalidHandle.value[0])
 
 typedef struct {
 	Arena arena;
@@ -336,6 +343,7 @@ typedef struct {
 } SharedMemoryRegion;
 
 typedef struct { u64 value[1]; } Barrier;
+typedef struct { u64 value[1]; } Handle;
 
 typedef struct {
 	u64      index;
