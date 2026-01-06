@@ -37,8 +37,8 @@ DEBUG_EXPORT GPUInfo *vk_gpu_info(void);
 
 DEBUG_EXPORT void vk_buffer_allocate(GPUBuffer *, iz size, GPUBufferCreateFlags flags, Handle *export, s8 label);
 DEBUG_EXPORT void vk_buffer_release(GPUBuffer *);
-DEBUG_EXPORT void vk_buffer_range_upload(GPUBuffer *, void *data, u64 offset, u64 size);
-DEBUG_EXPORT u64  vk_round_up_to_sync_size(u64);
+DEBUG_EXPORT void vk_buffer_range_upload(GPUBuffer *, void *data, u64 offset, u64 size, b32 non_temporal);
+DEBUG_EXPORT u64  vk_round_up_to_sync_size(u64, u64 min);
 
 // NOTE: temporary API
 DEBUG_EXPORT b32 vk_buffer_needs_sync(GPUBuffer *);

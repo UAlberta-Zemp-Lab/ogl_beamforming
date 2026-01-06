@@ -619,14 +619,15 @@ vk_buffer_needs_sync(GPUBuffer *b)
 }
 
 DEBUG_EXPORT u64
-vk_round_up_to_sync_size(u64 size)
+vk_round_up_to_sync_size(u64 size, u64 min)
 {
-	u64 result = (u64)round_up_to((iz)size, (iz)vulkan_context->memory_info.non_coherent_atom_size);
+	iz  round  = (iz)Max(min, vulkan_context->memory_info.non_coherent_atom_size);
+	u64 result = (u64)round_up_to((iz)size, round);
 	return result;
 }
 
 DEBUG_EXPORT void
-vk_buffer_range_upload(GPUBuffer *b, void *data, u64 offset, u64 size)
+vk_buffer_range_upload(GPUBuffer *b, void *data, u64 offset, u64 size, b32 non_temporal)
 {
 	assert(ValidHandle(b->buffer));
 
@@ -641,7 +642,10 @@ vk_buffer_range_upload(GPUBuffer *b, void *data, u64 offset, u64 size)
 	case VulkanMemoryKind_BAR:
 	{
 		assert(vb->host_pointer);
-		mem_copy((u8 *)vb->host_pointer + offset, data, size);
+		void *dest = (u8 *)vb->host_pointer + offset;
+		// NOTE(rnp): don't trash the CPU cache for large data stores
+		if (non_temporal) memory_copy_non_temporal(dest, data, size);
+		else              mem_copy(dest, data, size);
 
 		b32 coherent = vk->memory_info.memory_host_coherent[vb->memory_kind];
 		if (!coherent) {
@@ -650,7 +654,7 @@ vk_buffer_range_upload(GPUBuffer *b, void *data, u64 offset, u64 size)
 				.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
 				.memory = vb->memory,
 				.offset = offset - (offset % nca_size),
-				.size   = vk_round_up_to_sync_size(size),
+				.size   = vk_round_up_to_sync_size(size, nca_size),
 			}};
 			vkFlushMappedMemoryRanges(vk->device, countof(mrs), mrs);
 		}

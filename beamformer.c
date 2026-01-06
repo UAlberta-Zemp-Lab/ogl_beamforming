@@ -1430,7 +1430,7 @@ DEBUG_EXPORT BEAMFORMER_RF_UPLOAD_FN(beamformer_rf_upload)
 
 		BeamformerRFBuffer *rf = ctx->rf_buffer;
 
-		rf->active_rf_size = vk_round_up_to_sync_size(rf_block_rf_size & 0xFFFFFFFFULL);
+		rf->active_rf_size = vk_round_up_to_sync_size(rf_block_rf_size & 0xFFFFFFFFULL, 64);
 		if unlikely(rf->buffer.size < countof(rf->compute_syncs) * rf->active_rf_size)
 			beamformer_rf_buffer_allocate(rf, countof(rf->compute_syncs) * rf->active_rf_size);
 
@@ -1449,7 +1449,8 @@ DEBUG_EXPORT BEAMFORMER_RF_UPLOAD_FN(beamformer_rf_upload)
 		}
 
 		vk_buffer_range_upload(&rf->buffer, beamformer_shared_memory_scratch_arena(sm).beg,
-		                       slot * rf->active_rf_size, rf->active_rf_size);
+		                       slot * rf->active_rf_size, rf->active_rf_size, 1);
+		store_fence();
 
 		os_shared_memory_region_unlock(ctx->shared_memory, sm->locks, (i32)scratch_lock);
 		post_sync_barrier(ctx->shared_memory, upload_lock, sm->locks);
