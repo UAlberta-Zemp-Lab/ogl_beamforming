@@ -173,15 +173,6 @@ build_fatal_(char *format, ...)
 }
 
 function b32
-s8_equal(s8 a, s8 b)
-{
-	b32 result = a.len == b.len;
-	for (iz i = 0; result && i < a.len; i++)
-		result = a.data[i] == b.data[i];
-	return result;
-}
-
-function b32
 s8_contains(s8 s, u8 byte)
 {
 	b32 result = 0;
