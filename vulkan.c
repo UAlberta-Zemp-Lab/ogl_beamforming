@@ -532,8 +532,8 @@ vk_load_queues(Arena *memory, Stream *err)
 DEBUG_EXPORT void
 vk_load(Arena *memory, Stream *err)
 {
-	vulkan_context->entity_arena = sub_arena_end(memory, KB(32), KB(4));
-	vulkan_context->arena        = sub_arena_end(memory, KB(32), KB(4));
+	vulkan_context->entity_arena = sub_arena_end(memory, KB(64), KB(4));
+	vulkan_context->arena        = sub_arena_end(memory, KB(96), KB(4));
 
 	vk_load_library(err);
 	vk_load_instance();
