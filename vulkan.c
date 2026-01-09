@@ -139,36 +139,12 @@ vk_entity_release(VulkanEntity *entity)
 }
 
 function void
-vk_load_library(Stream *err)
+vk_load_instance(void)
 {
-	local_persist Handle vulkan_lib_handle = InvalidHandle;
-
-	#define X(name, ...) if (!ValidHandle(vulkan_lib_handle)) vulkan_lib_handle = os_load_library(name, 0, err);
-	OS_VULKAN_SONAME_LIST
-	#undef X
-
-	if (!ValidHandle(vulkan_lib_handle)) {
-		stream_append_s8(err, vulkan_info("fatal error: failed to find valid vulkan library\n"));
-		os_fatal(stream_to_s8(err));
-	}
-
-	#define X(name, ...) name = (name##_fn *)os_lookup_dynamic_symbol(vulkan_lib_handle, #name, err);
-	VkLoaderProcedureList
-	#undef X
-
-	if (!vkGetInstanceProcAddr) {
-		stream_append_s8(err, vulkan_info("fatal error: failed to find \"vkGetInstanceProcAddr\"\n"));
-		os_fatal(stream_to_s8(err));
-	}
-
 	#define X(name, ...) name = (name##_fn *)vkGetInstanceProcAddr(0, #name);
 	VkBaseProcedureList
 	#undef X
-}
 
-function void
-vk_load_instance(void)
-{
 	VkApplicationInfo app_info = {
 		.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		.pApplicationName   = BEAMFORMER_NAME_STRING,
@@ -530,12 +506,20 @@ vk_load_queues(Arena *memory, Stream *err)
 // NOTE(rnp): User API
 
 DEBUG_EXPORT void
-vk_load(Arena *memory, Stream *err)
+vk_load(BeamformerLibraryHandle vulkan_library_handle, Arena *memory, Stream *err)
 {
+	#define X(name, ...) name = (name##_fn *)os_lookup_symbol(vulkan_library_handle, #name, err);
+	VkLoaderProcedureList
+	#undef X
+
+	if (!vkGetInstanceProcAddr) {
+		stream_append_s8(err, vulkan_info("fatal error: failed to find \"vkGetInstanceProcAddr\"\n"));
+		os_fatal(stream_to_s8(err));
+	}
+
 	vulkan_context->entity_arena = sub_arena_end(memory, KB(64), KB(4));
 	vulkan_context->arena        = sub_arena_end(memory, KB(96), KB(4));
 
-	vk_load_library(err);
 	vk_load_instance();
 	vk_load_physical_device(vulkan_context->arena, err);
 	vk_load_queues(&vulkan_context->arena, err);
