@@ -1,4 +1,3 @@
-#include "beamformer_internal.h"
 #include "vulkan.h"
 
 #define vulkan_info(s) s8("[vulkan] " s)
@@ -116,8 +115,7 @@ function VulkanEntity *
 vk_entity_allocate(VulkanEntityKind kind)
 {
 	VulkanEntity *result = 0;
-	DeferLoop(os_take_lock(&vulkan_context->entity_lock, -1),
-	          os_release_lock(&vulkan_context->entity_lock))
+	DeferLoop(take_lock(&vulkan_context->entity_lock, -1), release_lock(&vulkan_context->entity_lock))
 	{
 		result = SLLPopFreelist(vulkan_context->entity_freelist);
 		if (!result) result = push_array_no_zero(&vulkan_context->entity_arena, VulkanEntity, 1);
@@ -131,8 +129,7 @@ vk_entity_allocate(VulkanEntityKind kind)
 function void
 vk_entity_release(VulkanEntity *entity)
 {
-	DeferLoop(os_take_lock(&vulkan_context->entity_lock, -1),
-	          os_release_lock(&vulkan_context->entity_lock))
+	DeferLoop(take_lock(&vulkan_context->entity_lock, -1), release_lock(&vulkan_context->entity_lock))
 	{
 		SLLStackPush(vulkan_context->entity_freelist, entity);
 	}
@@ -205,7 +202,7 @@ vk_load_physical_device(Arena arena, Stream *err)
 
 	vk->physical_device = best_index >= 0 ? devices[best_index] : 0;
 	if (!vk->physical_device)
-		os_fatal(vulkan_info("failed to find a suitable GPU\n"));
+		fatal(vulkan_info("failed to find a suitable GPU\n"));
 
 	VkPhysicalDeviceProperties2 *dp = push_struct(&arena, typeof(*dp));
 	dp->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -256,7 +253,7 @@ vk_load_physical_device(Arena arena, Stream *err)
 					stream_append_s8s(err, vulkan_info("    "), name, s8("\n"));
 				}
 			}
-			os_fatal(stream_to_s8(err));
+			fatal(stream_to_s8(err));
 		}
 	}
 
@@ -299,7 +296,7 @@ vk_load_physical_device(Arena arena, Stream *err)
 	// TODO(rnp): this shouldn't be fatal
 	if (bar_index == -1) {
 		stream_append_s8(err, vulkan_info("fatal error: GPU does not support host bar memory\n"));
-		os_fatal(stream_to_s8(err));
+		fatal(stream_to_s8(err));
 	}
 
 	vk->memory_info.memory_type_indices[VulkanMemoryKind_BAR] = bar_index;
@@ -389,7 +386,7 @@ vk_load_queues(Arena *memory, Stream *err)
 
 	if (queue_indices[VulkanQueueKind_Graphics] == -1) {
 		stream_append_s8(err, vulkan_info("fatal error: GPU does not support graphics presentation\n"));
-		os_fatal(stream_to_s8(err));
+		fatal(stream_to_s8(err));
 	}
 
 	if (queue_indices[VulkanQueueKind_Compute] == -1)
@@ -398,7 +395,7 @@ vk_load_queues(Arena *memory, Stream *err)
 
 	if (queue_indices[VulkanQueueKind_Compute] == -1) {
 		stream_append_s8(err, vulkan_info("fatal error: GPU does not support compute\n"));
-		os_fatal(stream_to_s8(err));
+		fatal(stream_to_s8(err));
 	}
 
 	if (queue_indices[VulkanQueueKind_Transfer] == -1) {
@@ -410,7 +407,7 @@ vk_load_queues(Arena *memory, Stream *err)
 
 	if (queue_indices[VulkanQueueKind_Transfer] == -1) {
 		stream_append_s8(err, vulkan_info("fatal error: GPU does not support data transfer\n"));
-		os_fatal(stream_to_s8(err));
+		fatal(stream_to_s8(err));
 	}
 
 	/////////////////////////////////////////////////////////////////
@@ -506,15 +503,15 @@ vk_load_queues(Arena *memory, Stream *err)
 // NOTE(rnp): User API
 
 DEBUG_EXPORT void
-vk_load(BeamformerLibraryHandle vulkan_library_handle, Arena *memory, Stream *err)
+vk_load(OSLibrary vulkan_library_handle, Arena *memory, Stream *err)
 {
-	#define X(name, ...) name = (name##_fn *)os_lookup_symbol(vulkan_library_handle, #name, err);
+	#define X(name, ...) name = (name##_fn *)os_lookup_symbol(vulkan_library_handle, #name);
 	VkLoaderProcedureList
 	#undef X
 
 	if (!vkGetInstanceProcAddr) {
 		stream_append_s8(err, vulkan_info("fatal error: failed to find \"vkGetInstanceProcAddr\"\n"));
-		os_fatal(stream_to_s8(err));
+		fatal(stream_to_s8(err));
 	}
 
 	vulkan_context->entity_arena = sub_arena_end(memory, KB(64), KB(4));
@@ -529,7 +526,7 @@ vk_load(BeamformerLibraryHandle vulkan_library_handle, Arena *memory, Stream *er
 	// TODO: setup render pipeline
 
 	if (err->widx > 0) {
-		os_write_file(os_error_handle(), stream_to_s8(err));
+		os_console_log(err->data, err->widx);
 		stream_reset(err, 0);
 	}
 }
@@ -565,7 +562,7 @@ vk_buffer_release(GPUBuffer *b)
 }
 
 DEBUG_EXPORT void
-vk_buffer_allocate(GPUBuffer *b, iz size, GPUBufferCreateFlags flags, Handle *export, s8 label)
+vk_buffer_allocate(GPUBuffer *b, iz size, GPUBufferCreateFlags flags, OSHandle *export, s8 label)
 {
 	vk_buffer_release(b);
 	VulkanContext *vk = vulkan_context;
@@ -712,7 +709,7 @@ vk_buffer_range_upload(GPUBuffer *b, void *data, u64 offset, u64 size, b32 non_t
 }
 
 DEBUG_EXPORT VulkanHandle
-vk_semaphore_create(Handle *export)
+vk_semaphore_create(OSHandle *export)
 {
 	VulkanContext *vk = vulkan_context;
 

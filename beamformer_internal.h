@@ -2,9 +2,9 @@
 #ifndef BEAMFORMER_INTERNAL_H
 #define BEAMFORMER_INTERNAL_H
 
-#include "util.h"
-
 #include "beamformer.h"
+
+#include "util.h"
 #include "opengl.h"
 
 #include "generated/beamformer.meta.c"
@@ -15,8 +15,11 @@
 
 #include "threads.c"
 #include "util_gl.c"
+#include "util_os.c"
 
 #define beamformer_info(s) s8("[info] " s "\n")
+
+#define os_path_separator() (s8){.data = &os_get_system_info()->path_separator_byte, .len = 1}
 
 typedef enum {
 	GPUBufferCreateFlags_HostWritable = 1 << 0,
@@ -40,11 +43,11 @@ typedef struct {
 
 ///////////////////////////
 // NOTE: vulkan layer API
-DEBUG_EXPORT void vk_load(BeamformerLibraryHandle vulkan, Arena *memory, Stream *error);
+DEBUG_EXPORT void vk_load(OSLibrary vulkan, Arena *memory, Stream *error);
 
 DEBUG_EXPORT GPUInfo *vk_gpu_info(void);
 
-DEBUG_EXPORT void vk_buffer_allocate(GPUBuffer *, iz size, GPUBufferCreateFlags flags, Handle *export, s8 label);
+DEBUG_EXPORT void vk_buffer_allocate(GPUBuffer *, iz size, GPUBufferCreateFlags flags, OSHandle *export, s8 label);
 DEBUG_EXPORT void vk_buffer_release(GPUBuffer *);
 DEBUG_EXPORT void vk_buffer_range_upload(GPUBuffer *, void *data, u64 offset, u64 size, b32 non_temporal);
 DEBUG_EXPORT u64  vk_round_up_to_sync_size(u64, u64 min);
@@ -52,7 +55,7 @@ DEBUG_EXPORT u64  vk_round_up_to_sync_size(u64, u64 min);
 // NOTE: temporary API
 DEBUG_EXPORT b32 vk_buffer_needs_sync(GPUBuffer *);
 
-DEBUG_EXPORT VulkanHandle vk_semaphore_create(Handle *export);
+DEBUG_EXPORT VulkanHandle vk_semaphore_create(OSHandle *export);
 
 ///////////////////////////////
 // NOTE: CUDA Library Bindings
@@ -217,7 +220,7 @@ struct BeamformerComputePlan {
 typedef struct {
 	// NOTE(rnp): w32 doesn't transfer ownership of these when they are imported
 	// into the driver. For now just store them here, this code won't be around for long
-	Handle       upload_semaphores_handles[BeamformerMaxRawDataFramesInFlight];
+	OSHandle     upload_semaphores_handles[BeamformerMaxRawDataFramesInFlight];
 	VulkanHandle vk_upload_semaphores[BeamformerMaxRawDataFramesInFlight];
 	u32          gl_upload_semaphores[BeamformerMaxRawDataFramesInFlight];
 
@@ -226,7 +229,7 @@ typedef struct {
 	u64          uploaded_data_indices[BeamformerMaxRawDataFramesInFlight];
 
 	GPUBuffer buffer;
-	Handle    export_handle;
+	OSHandle  export_handle;
 
 	u32 ssbo, memory_object;
 
@@ -293,10 +296,10 @@ typedef struct {
 } ComputeTimingTable;
 
 typedef struct {
-	BeamformerRFBuffer *rf_buffer;
-	SharedMemoryRegion *shared_memory;
-	ComputeTimingTable *compute_timing_table;
-	i32                *compute_worker_sync;
+	BeamformerRFBuffer *     rf_buffer;
+	BeamformerSharedMemory * shared_memory;
+	ComputeTimingTable *     compute_timing_table;
+	i32                *     compute_worker_sync;
 } BeamformerUploadThreadContext;
 
 struct BeamformerFrame {
@@ -323,6 +326,26 @@ struct BeamformerFrame {
 };
 
 typedef struct {
+	OSThread handle;
+
+	Arena arena;
+	iptr  window_handle;
+	iptr  gl_context;
+	iptr  user_context;
+	i32   sync_variable;
+	b32   awake;
+} GLWorkerThreadContext;
+
+typedef enum {
+	BeamformerState_Uninitialized = 0,
+	BeamformerState_Running,
+	BeamformerState_ShouldClose,
+	BeamformerState_Terminated,
+} BeamformerState;
+
+typedef struct {
+	BeamformerState state;
+
 	iv2 window_size;
 
 	Arena  arena;
@@ -343,7 +366,7 @@ typedef struct {
 	ComputeShaderStats *compute_shader_stats;
 	ComputeTimingTable *compute_timing_table;
 
-	SharedMemoryRegion shared_memory;
+	BeamformerSharedMemory *shared_memory;
 
 	BeamformerFrame beamform_frames[BeamformerMaxSavedFrames];
 	BeamformerFrame *latest_frame;
@@ -385,5 +408,8 @@ typedef BEAMFORMER_COMPLETE_COMPUTE_FN(beamformer_complete_compute_fn);
 
 #define BEAMFORMER_RF_UPLOAD_FN(name) void name(BeamformerUploadThreadContext *ctx)
 typedef BEAMFORMER_RF_UPLOAD_FN(beamformer_rf_upload_fn);
+
+#define BEAMFORMER_DEBUG_UI_DEINIT_FN(name) void name(BeamformerCtx *ctx)
+typedef BEAMFORMER_DEBUG_UI_DEINIT_FN(beamformer_debug_ui_deinit_fn);
 
 #endif /* BEAMFORMER_INTERNAL_H */
