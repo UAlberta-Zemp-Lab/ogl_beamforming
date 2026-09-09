@@ -66,8 +66,6 @@ void main()
 	uint channel    = gl_GlobalInvocationID.y;
 	uint transmit   = gl_GlobalInvocationID.z;
 
-	uint thread_index = gl_LocalInvocationIndex;
-	uint thread_count = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
 	/////////////////////////
 	// NOTE: sample caching
 	{
@@ -86,14 +84,8 @@ void main()
 		input_address += InputDataKindByteSize * (DecimationRate * gl_WorkGroupID.x * gl_WorkGroupSize.x);
 		input_address -= InputDataKindByteSize * (FilterLength - 1);
 
-		uint total_samples       = rf.length();
-		uint samples_per_thread  = total_samples / thread_count;
-		uint leftover_count      = total_samples % thread_count;
-		uint samples_this_thread = samples_per_thread + uint(thread_index < leftover_count);
-
 		const SAMPLE_TYPE scale = SAMPLE_TYPE(bool(ComplexFilter) ? 1 : sqrt(2.0f));
-		for (uint i = 0; i < samples_this_thread; i++) {
-			uint index = thread_count * i + thread_index;
+		for (u32 index = gl_LocalInvocationIndex; index < rf.length(); index += gl_WorkGroupSize.x) {
 			SAMPLE_TYPE s = SAMPLE_TYPE(0);
 			if (!offset_wraps || index >= FilterLength - 1) {
 				s = SAMPLE_TYPE(Input(input_address).x[index]);
@@ -109,7 +101,7 @@ void main()
 	Filter f = Filter(HeapBase + FilterCoefficients);
 	if (out_sample < SampleCount / DecimationRate) {
 		RESULT_TYPE result = RESULT_TYPE(0);
-		u32 offset = DecimationRate * thread_index;
+		u32 offset = DecimationRate * gl_LocalInvocationIndex;
 		for (u32 j = 0; j < FilterLength; j++)
 			result += apply_filter(rf[offset + j], f.values[j]);
 

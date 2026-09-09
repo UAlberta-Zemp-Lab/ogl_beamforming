@@ -28,18 +28,9 @@ void run_decode_large(void)
 	u32 channel     = gl_GlobalInvocationID.y;
 	u32 time_sample = gl_GlobalInvocationID.z;
 
-	const u32 samples_per_thread = TransmitCount / gl_WorkGroupSize.x;
-	const u32 leftover_samples   = TransmitCount % gl_WorkGroupSize.x;
-
-	u32 thread_index_x      = gl_LocalInvocationID.x;
-	u32 samples_this_thread = samples_per_thread + u32(thread_index_x < leftover_samples);
-
 	u32 rf_offset = TransmitCount * ChunkChannelCount * gl_WorkGroupID.z + TransmitCount * channel;
-
-	for (u32 i = 0; i < samples_this_thread; i++) {
-		u32 index = i * gl_WorkGroupSize.x + thread_index_x;
+	for (u32 index = gl_LocalInvocationID.x; index < TransmitCount; index += gl_WorkGroupSize.x)
 		rf[gl_LocalInvocationID.y][index] = RF(rf_buffer).x[rf_offset + index];
-	}
 
 	barrier();
 
