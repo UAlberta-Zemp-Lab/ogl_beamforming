@@ -2,6 +2,8 @@
 /* TODO(rnp):
  * [ ]: backtrace dumping on SIGSEGV
  * [ ]: cooperative shared memory loading in decode shader
+ * [ ]: refactor: when there are only two beamforming shaders switch back to ping pong input
+ *      for DAS instead of fixed region to allow overlap with first stage
  * [ ]: refactor: save filter parameters with rest of parameters, whole slot thing is dumb
  * [ ]: upload previously exported data for display. maybe this is a UI thing but doing it
  *      programatically would be nice.
@@ -1579,7 +1581,7 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena *arena)
 					u64 output_pointer = ((i + 1) == (u32)das_index) ? pp_das_pointer : pp_output_pointer;
 					u64 input_pointer  = (i == 0 && !special_handling) ? rf_pointer : pp_input_pointer;
 
-					if (i != 0) gpu_command_pipeline_barrier(cmd, 0);
+					if (i != 0 || i == ((u32)das_index - 1)) gpu_command_pipeline_barrier(cmd, 0);
 					do_compute_shader(cmd, cp, frame, input_pointer, output_pointer, i, channel_offset);
 					gpu_command_timestamp(cmd);
 				}
