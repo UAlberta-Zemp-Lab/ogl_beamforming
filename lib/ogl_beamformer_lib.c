@@ -699,6 +699,8 @@ beamformer_beamform_data(BeamformerSimpleParameters *bp, void *data, uint32_t da
 {
 	b32 result = beamformer_push_simple_parameters(bp);
 	if (result) {
+		beamformer_set_global_timeout(timeout_ms);
+
 		iv3 output_points = bp->output_points.xyz;
 		output_points.E[0] = Max(1, output_points.E[0]);
 		output_points.E[1] = Max(1, output_points.E[1]);
