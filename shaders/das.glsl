@@ -246,8 +246,8 @@ RESULT_TYPE RCA(const vec3 world_point)
 		const u8   tx_rx_orientation = tx_rx_orientation_for_acquisition(acquisition);
 		const bool rx_rows           = RX_ORIENTATION(tx_rx_orientation) == RCAOrientation_Rows;
 		const vec2 focal_vector      = focal_vector_for_acquisition(acquisition);
-		vec2  xdc_world_point   = rca_plane_projection((xdc_transform * vec4(world_point, 1)).xyz, rx_rows);
-		float transmit_distance = rca_transmit_distance(world_point, focal_vector, tx_rx_orientation);
+		vec2  xdc_world_point = rca_plane_projection((xdc_transform * vec4(world_point, 1)).xyz, rx_rows);
+		f32   transmit_index  = sample_index(rca_transmit_distance(world_point, focal_vector, tx_rx_orientation));
 
 		u64 rf_pointer  = RFData + InputDataKindByteSize * acquisition * SampleCount;
 		rf_pointer     -= InputDataKindByteSize * u32(InterpolationMode == InterpolationMode_Cubic);
@@ -259,7 +259,7 @@ RESULT_TYPE RCA(const vec3 world_point)
 			f32  a_arg          = abs(FNumber * receive_vector.x / abs(xdc_world_point.y));
 
 			if (a_arg < 0.5f) {
-				f32         index = sample_index(transmit_distance + length(receive_vector));
+				f32         index = transmit_index + length(receive_vector) * SamplingFrequency / SpeedOfSound;
 				SAMPLE_TYPE value = apodize(a_arg) * sample_rf(rf_pointer, index);
 				result += RESULT_STORE(value);
 			}
