@@ -37,22 +37,20 @@
   #define HeapBase u64(0)
 #endif
 
-layout(std430, buffer_reference) buffer Input  { InputDataType x[]; };
-layout(std430, buffer_reference) buffer Output { OutputDataType x[]; };
+layout(std430, buffer_reference) readonly buffer Input  { InputDataType  x[]; };
+layout(std430, buffer_reference)          buffer Output { OutputDataType x[]; };
 
-layout(std430, buffer_reference) buffer IncoherentOutput {
-	f32 x[];
-};
+layout(std430, buffer_reference) buffer IncoherentOutput { f32 x[]; };
 
-layout(std430, buffer_reference) buffer F16   { f16     x[]; };
-layout(std430, buffer_reference) buffer F32   { f32     x[]; };
-layout(std430, buffer_reference) buffer S16   { s16     x[]; };
-layout(std430, buffer_reference) buffer U8    { u8      x[]; };
-layout(std430, buffer_reference) buffer U32V4 { u32vec4 x[]; };
-layout(std430, buffer_reference) buffer F32V2 { f32vec2 x[]; };
-layout(std430, buffer_reference) buffer F32V4 { f32vec4 x[]; };
-layout(std430, buffer_reference) buffer F16V2 { f16vec2 x[]; };
-layout(std430, buffer_reference) buffer F16V4 { f16vec4 x[]; };
+layout(std430, buffer_reference) readonly buffer F16   { f16     x[]; };
+layout(std430, buffer_reference) readonly buffer F32   { f32     x[]; };
+layout(std430, buffer_reference) readonly buffer S16   { s16     x[]; };
+layout(std430, buffer_reference) readonly buffer U8    { u8      x[]; };
+layout(std430, buffer_reference) readonly buffer U32V4 { u32vec4 x[]; };
+layout(std430, buffer_reference) readonly buffer F32V2 { f32vec2 x[]; };
+layout(std430, buffer_reference) readonly buffer F32V4 { f32vec4 x[]; };
+layout(std430, buffer_reference) readonly buffer F16V2 { f16vec2 x[]; };
+layout(std430, buffer_reference) readonly buffer F16V4 { f16vec4 x[]; };
 
 #define RX_ORIENTATION(tx_rx) bitfieldExtract((tx_rx), 0, 4)
 #define TX_ORIENTATION(tx_rx) bitfieldExtract((tx_rx), 4, 4)

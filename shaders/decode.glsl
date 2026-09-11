@@ -13,7 +13,7 @@ layout(std430, buffer_reference, buffer_reference_align = 64) restrict writeonly
 	OutputDataType x[];
 };
 
-layout(std430, buffer_reference) buffer F16 { f16 x[]; };
+layout(std430, buffer_reference, buffer_reference_align = 16) readonly buffer F16 { f16 x[]; };
 
 OutputDataType sample_rf_data(u32 index)
 {
