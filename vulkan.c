@@ -7,6 +7,8 @@
 #include "vulkan.h"
 #include "external/glslang/glslang/Include/glslang_c_interface.h"
 
+#define VulkanDebug BEAMFORMER_DEBUG
+
 #define ForceSingleQueue             (0)
 #define SupportNonCoherentHostMemory (0)
 
@@ -229,7 +231,7 @@ read_only global str8 vk_debug_extensions[] = {VK_DEBUG_EXTENSIONS};
 read_only global str8 vk_instance_debug_extensions[] = {VK_INSTANCE_DEBUG_EXTENSIONS_LIST};
 #undef X
 
-#if BEAMFORMER_DEBUG
+#if VulkanDebug
 #define VK_VALIDATION_LAYERS_LIST \
 	X(KHRONOS, validation) \
 
@@ -272,7 +274,7 @@ global struct {
 		b8 E[countof(vk_instance_debug_extensions)];
 	} instance;
 
-	#if BEAMFORMER_DEBUG
+	#if VulkanDebug
 	struct {
 		union {
 			struct {
@@ -396,7 +398,7 @@ vk_renderdoc_instance_handle(void)
 }
 #endif
 
-#if BEAMFORMER_DEBUG
+#if VulkanDebug
 #define vk_label_object(k, h, label, extra) vk_label_object_(VK_OBJECT_TYPE_##k, (u64)h, label, extra)
 function void
 vk_label_object_(VkObjectType kind, u64 handle, str8 label, str8 extra)
@@ -1071,7 +1073,7 @@ vk_load_instance(Arena *arena, Stream *err)
 	//for EachElement(vk_required_instance_extensions, it)
 	//	enabled_instance_extensions[enabled_instance_extensions_count++] = vk_required_instance_extensions[it];
 
-	#if BEAMFORMER_DEBUG
+	#if VulkanDebug
 	{
 		u32 layer_count = 0;
 		vkEnumerateInstanceLayerProperties(&layer_count, 0);
@@ -1145,7 +1147,7 @@ vk_load_instance(Arena *arena, Stream *err)
 		.enabledLayerCount       = enabled_validation_layers_count,
 	};
 
-	#if 0 && BEAMFORMER_DEBUG
+	#if 0 && VulkanDebug
 	VkValidationFeatureEnableEXT validation_feature_enables[] = {
 		VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
 		VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
@@ -1251,7 +1253,7 @@ vk_load_physical_device(Arena *arena, Stream *err)
 			for EachElement(vk_optional_device_extensions, it)
 				vulkan_config.optional.E[it] |= str8_equal(vk_optional_device_extensions[it], ext_str8s[index]);
 
-		#if BEAMFORMER_DEBUG
+		#if VulkanDebug
 		for EachIndex(extension_count, index)
 			for EachElement(vk_debug_extensions, it)
 				vulkan_config.debug.E[it] |= str8_equal(vk_debug_extensions[it], ext_str8s[index]);
@@ -1457,7 +1459,7 @@ vk_load_physical_device(Arena *arena, Stream *err)
 	// IMPORTANT(rnp): memory must only be pushed at the end of the function
 	vk->gpu_info.name = push_str8(vk->arena, str8_from_c_str(dp.properties.deviceName));
 
-	#if BEAMFORMER_DEBUG
+	#if VulkanDebug
 	{
 		b32 mismatch = 0;
 		for EachElement(vk_validation_layers, it) {
