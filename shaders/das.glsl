@@ -247,7 +247,7 @@ RESULT_TYPE RCA(const vec3 world_point)
 		vec2  xdc_world_point = rca_plane_projection((xdc_transform * vec4(world_point, 1)).xyz, rx_rows);
 		f32   transmit_index  = sample_index(rca_transmit_distance(world_point, focal_vector, tx_rx_orientation));
 
-		u64 rf_pointer  = RFData + InputDataKindByteSize * acquisition * SampleCount;
+		u64 rf_pointer  = rf_data + InputDataKindByteSize * acquisition * SampleCount;
 		rf_pointer     -= InputDataKindByteSize * u32(InterpolationMode == InterpolationMode_Cubic);
 
 		for (f32 chunk_channel = 0.f; chunk_channel < f32(batch_channel_count()); chunk_channel += 1.f) {
@@ -291,7 +291,7 @@ RESULT_TYPE HERCULES(const vec3 world_point)
 		f32 element_receive_delta_squared = rx_world_point - rx_channel * rx_pitch;
 		element_receive_delta_squared *= element_receive_delta_squared;
 
-		u64 rf_pointer  = RFData + InputDataKindByteSize * (u32(chunk_channel) * SampleCount * AcquisitionCount + u32(Sparse) * SampleCount);
+		u64 rf_pointer  = rf_data + InputDataKindByteSize * (u32(chunk_channel) * SampleCount * AcquisitionCount + u32(Sparse) * SampleCount);
 		rf_pointer     -= InputDataKindByteSize * u32(InterpolationMode == InterpolationMode_Cubic);
 
 		for (f32 transmit = f32(Sparse); transmit < f32(AcquisitionCount); transmit += 1.f) {
@@ -335,7 +335,7 @@ RESULT_TYPE FORCES(const vec3 world_point)
 		f32 a_arg           = abs(FNumber * receive_x_delta / xdc_world_point.z);
 
 		if (a_arg < 0.5f) {
-			u64 rf_pointer  = RFData + InputDataKindByteSize * (u32(chunk_channel) * SampleCount * AcquisitionCount + u32(Sparse) * SampleCount);
+			u64 rf_pointer  = rf_data + InputDataKindByteSize * (u32(chunk_channel) * SampleCount * AcquisitionCount + u32(Sparse) * SampleCount);
 			rf_pointer     -= InputDataKindByteSize * u32(InterpolationMode == InterpolationMode_Cubic);
 
 			f32 receive_index = sample_index(sqrt(receive_x_delta * receive_x_delta + z_delta_squared));
@@ -375,7 +375,7 @@ RESULT_TYPE READI_FORCES(const vec3 world_point)
 		f32 a_arg           = abs(FNumber * receive_x_delta / xdc_world_point.z);
 
 		if (a_arg < 0.5f) {
-			u64 channel_rf_pointer  = RFData + InputDataKindByteSize * u32(chunk_channel) * SampleCount * AcquisitionCount;
+			u64 channel_rf_pointer  = rf_data + InputDataKindByteSize * u32(chunk_channel) * SampleCount * AcquisitionCount;
 			channel_rf_pointer     -= InputDataKindByteSize * u32(InterpolationMode == InterpolationMode_Cubic);
 
 			f32 receive_index = sample_index(sqrt(receive_x_delta * receive_x_delta + z_delta_squared));

@@ -2,8 +2,6 @@
 /* TODO(rnp):
  * [ ]: backtrace dumping on SIGSEGV
  * [ ]: cooperative shared memory loading in decode shader
- * [ ]: refactor: when there are only two beamforming shaders switch back to ping pong input
- *      for DAS instead of fixed region to allow overlap with first stage
  * [ ]: refactor: save filter parameters with rest of parameters, whole slot thing is dumb
  * [ ]: upload previously exported data for display. maybe this is a UI thing but doing it
  *      programatically would be nice.
@@ -905,9 +903,6 @@ plan_compute_pipeline(BeamformerComputePlan *cp, BeamformerParameterBlock *pb, A
 				db->OutputSizeZ           = cp->output_points.z;
 				db->TransmitReceiveOrientation = pb->parameters.transmit_receive_orientation;
 
-				u64 pp_size = beamformer_context->compute_context.ping_pong_buffer.size / PING_PONG_BUFFER_SLOTS;
-				db->RFData  = beamformer_context->compute_context.ping_pong_buffer.gpu_pointer + (PING_PONG_BUFFER_SLOTS - 1) * pp_size;
-
 				// NOTE(rnp): old gcc will miscompile an assignment
 				memory_copy(cp->xdc_transform.E, pb->parameters.xdc_transform.E, sizeof(cp->xdc_transform));
 
@@ -1293,6 +1288,7 @@ do_compute_shader(GPUCommandList cmd, BeamformerComputePlan *cp, BeamformerFrame
 	case BeamformerShaderKind_DAS:{
 		BeamformerDASPushConstants pc = {
 			.xdc_element_pitch = cp->xdc_element_pitch,
+			.rf_data           = input_pointer,
 			.output_frame      = frame->gpu_pointer,
 			.channel_offset    = channel_offset,
 			.readi_group       = cp->readi_group,
@@ -1571,17 +1567,15 @@ complete_queue(BeamformerCtx *ctx, BeamformWorkQueue *q, Arena *arena)
 				for (u32 i = 0; i < cp->first_image_shader_index; i++) {
 					u32 output_index      = !cs->ping_pong_input_index;
 					u32 input_index       =  cs->ping_pong_input_index;
-					u32 das_output_index  =  PING_PONG_BUFFER_SLOTS - 1;
 
 					u64 pp_size           = cs->ping_pong_buffer.size / PING_PONG_BUFFER_SLOTS;
-					u64 pp_input_pointer  = cs->ping_pong_buffer.gpu_pointer + input_index      * pp_size;
-					u64 pp_output_pointer = cs->ping_pong_buffer.gpu_pointer + output_index     * pp_size;
-					u64 pp_das_pointer    = cs->ping_pong_buffer.gpu_pointer + das_output_index * pp_size;
+					u64 pp_input_pointer  = cs->ping_pong_buffer.gpu_pointer + input_index  * pp_size;
+					u64 pp_output_pointer = cs->ping_pong_buffer.gpu_pointer + output_index * pp_size;
 
-					u64 output_pointer = ((i + 1) == (u32)das_index) ? pp_das_pointer : pp_output_pointer;
+					u64 output_pointer = pp_output_pointer;
 					u64 input_pointer  = (i == 0 && !special_handling) ? rf_pointer : pp_input_pointer;
 
-					if (i != 0 || i == ((u32)das_index - 1)) gpu_command_pipeline_barrier(cmd, 0);
+					if (i != 0) gpu_command_pipeline_barrier(cmd, 0);
 					do_compute_shader(cmd, cp, frame, input_pointer, output_pointer, i, channel_offset);
 					gpu_command_timestamp(cmd);
 				}

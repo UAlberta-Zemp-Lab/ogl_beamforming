@@ -189,7 +189,6 @@ typedef struct {
 } BeamformerFilterBakeParameters;
 
 typedef struct {
-	u64 RFData;
 	u32 FocalVectors;
 	u32 Hadamard;
 	u32 IncoherentFrame;
@@ -247,6 +246,7 @@ typedef struct {
 	m4  xdc_transform;
 	m4  voxel_transform;
 	v2  xdc_element_pitch;
+	u64 rf_data;
 	u64 output_frame;
 	i32 channel_offset;
 	u32 readi_group;
@@ -605,30 +605,29 @@ read_only global MetaStructMember *meta_struct_members_by_id[] = {
 		{18, 48, 1, 0},
 	},
 	(MetaStructMember []){
-		{17, 0,  1, 0},
+		{18, 0,  1, 0},
+		{18, 4,  1, 0},
 		{18, 8,  1, 0},
 		{18, 12, 1, 0},
 		{18, 16, 1, 0},
 		{18, 20, 1, 0},
-		{18, 24, 1, 0},
-		{18, 28, 1, 0},
+		{10, 24, 1, 0},
+		{10, 28, 1, 0},
 		{10, 32, 1, 0},
 		{10, 36, 1, 0},
-		{10, 40, 1, 0},
-		{10, 44, 1, 0},
+		{8,  40, 1, 0},
+		{8,  44, 1, 0},
 		{8,  48, 1, 0},
 		{8,  52, 1, 0},
-		{8,  56, 1, 0},
+		{18, 56, 1, 0},
 		{8,  60, 1, 0},
 		{18, 64, 1, 0},
 		{8,  68, 1, 0},
-		{18, 72, 1, 0},
-		{8,  76, 1, 0},
-		{8,  80, 1, 0},
+		{8,  72, 1, 0},
+		{18, 76, 1, 0},
+		{18, 80, 1, 0},
 		{18, 84, 1, 0},
 		{18, 88, 1, 0},
-		{18, 92, 1, 0},
-		{18, 96, 1, 0},
 	},
 	(MetaStructMember []){
 		{18, 0, 1, 0},
@@ -678,7 +677,6 @@ read_only global str8 *meta_struct_member_names_by_id[] = {
 		str8_comp("OutputTransmitStride"),
 	},
 	(str8 []){
-		str8_comp("RFData"),
 		str8_comp("FocalVectors"),
 		str8_comp("Hadamard"),
 		str8_comp("IncoherentFrame"),
@@ -722,11 +720,11 @@ read_only global str8 *meta_struct_member_names_by_id[] = {
 };
 
 read_only global MetaStructInfo meta_struct_info_by_id[] = {
-	{str8_comp("DecodeBakeParameters"),             11, 44,  0},
-	{str8_comp("FilterBakeParameters"),             13, 52,  0},
-	{str8_comp("DASBakeParameters"),                24, 100, 0},
-	{str8_comp("CoherencyWeightingBakeParameters"), 3,  12,  0},
-	{str8_comp("ReshapeBakeParameters"),            9,  36,  0},
+	{str8_comp("DecodeBakeParameters"),             11, 44, 0},
+	{str8_comp("FilterBakeParameters"),             13, 52, 0},
+	{str8_comp("DASBakeParameters"),                23, 92, 0},
+	{str8_comp("CoherencyWeightingBakeParameters"), 3,  12, 0},
+	{str8_comp("ReshapeBakeParameters"),            9,  36, 0},
 };
 
 read_only global str8 beamformer_shader_names[] = {
@@ -855,6 +853,7 @@ read_only global str8 beamformer_shader_global_header_strings[] = {
 	"  f32mat4  xdc_transform;\n"
 	"  f32mat4  voxel_transform;\n"
 	"  f32vec2  xdc_element_pitch;\n"
+	"  uint64_t rf_data;\n"
 	"  uint64_t output_frame;\n"
 	"  int32_t  channel_offset;\n"
 	"  uint32_t readi_group;\n"

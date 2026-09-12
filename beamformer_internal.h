@@ -406,7 +406,7 @@ typedef struct {
 } BeamformerFrame;
 
 /* NOTE(rnp): backing storage for beamformed frames. The amount of backlog frames
-* is dependant on the currently requested output size. */
+ * is dependant on the currently requested output size. */
 typedef struct {
 	GPUBuffer   buffer[1];
 
@@ -422,14 +422,8 @@ typedef struct {
 	BeamformerComputePlan *compute_plans[BeamformerMaxParameterBlocks];
 	BeamformerComputePlan *compute_plan_freelist;
 
-	/* NOTE(rnp): used to ping pong data between compute stages.
-	 *
-	 * Allocate one extra slot for DAS output to allow overlap with the next
-	 * channel chunk batch. To obtain optimal overlap we need 2 extra slots
-	 * and we need to ping pong submissions between queues. This is not
-	 * implemented so we only do 1 extra slot for now.
-	 */
-	#define PING_PONG_BUFFER_SLOTS (2 + 1)
+	// NOTE(rnp): used to ping pong data between compute stages.
+	#define PING_PONG_BUFFER_SLOTS 2
 	GPUBuffer ping_pong_buffer;
 	OSHandle  ping_pong_export_handle;
 	u32       ping_pong_input_index;

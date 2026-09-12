@@ -394,7 +394,6 @@
 
 		@Bake
 		{
-			[RFData                      U64]
 			[FocalVectors                U32]
 			[Hadamard                    U32]
 			[IncoherentFrame             U32]
@@ -430,6 +429,7 @@
 			[xdc_transform      M4]
 			[voxel_transform    M4]
 			[xdc_element_pitch  V2]
+			[rf_data           U64]
 			[output_frame      U64]
 			[channel_offset    S32]
 			[readi_group       U32]
