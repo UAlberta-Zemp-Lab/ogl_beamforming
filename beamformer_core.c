@@ -270,7 +270,7 @@ gpu_resource_build_end(GPUResourceBuilder *rb, GPUBuffer *buffer)
 	if (size != (u64)buffer->size) {
 		gpu_buffer_allocate(buffer, (GPUBufferAllocateInfo){
 			.size  = size,
-			.flags = VulkanUsageFlag_HostReadWrite|VulkanUsageFlag_TransferDestination,
+			.flags = GPUUsageFlag_HostWrite,
 			.label = push_str8_f(rb->arena, "GPU Temp Arena [%p]", buffer),
 		});
 	}
@@ -566,7 +566,6 @@ plan_compute_pipeline(BeamformerComputePlan *cp, BeamformerParameterBlock *pb, A
 		b32 cuda = cuda_supported();
 		GPUBufferAllocateInfo allocate_info = {
 			.size   = buffer_size,
-			.flags  = VulkanUsageFlag_TransferDestination,
 			.export = cuda ? &beamformer_context->compute_context.ping_pong_export_handle : 0,
 			.label  = str8("PingPongBuffer"),
 		};
@@ -1740,8 +1739,9 @@ DEBUG_EXPORT BEAMFORMER_RF_UPLOAD_FN(beamformer_rf_upload)
 		if unlikely(rf->buffer.size < countof(rf->upload_complete_values) * rf->active_rf_size) {
 			GPUBufferAllocateInfo allocate_info = {
 				.size  = countof(rf->upload_complete_values) * rf->active_rf_size,
-				.flags = VulkanUsageFlag_HostReadWrite|VulkanUsageFlag_TransferSource,
+				.flags = GPUUsageFlag_HostWrite,
 				.label = str8("RawRFBuffer"),
+				.single_transfer_size = rf->active_rf_size,
 			};
 			gpu_buffer_allocate(&rf->buffer, allocate_info);
 		}

@@ -209,11 +209,10 @@ beamformer_init(BeamformerInput *input)
 		}
 
 		for (u32 i = base_index; i < countof(trial_sizes); i++) {
-			// TODO(rnp): it may be better to download data from this using the transfer queue
 			GPUTimeline timelines[] = {GPUTimeline_Compute, GPUTimeline_Graphics};
 			GPUBufferAllocateInfo allocate_info = {
 				.size            = trial_sizes[i],
-				.flags           = VulkanUsageFlag_TransferDestination|VulkanUsageFlag_TransferSource|VulkanUsageFlag_HostReadWrite,
+				.flags           = GPUUsageFlag_TransferDestination|GPUUsageFlag_TransferSource|GPUUsageFlag_HostRead,
 				.timeline_count  = countof(timelines),
 				.timelines_used  = timelines,
 				.label           = str8("BeamformedData"),

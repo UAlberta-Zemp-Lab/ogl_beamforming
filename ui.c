@@ -794,7 +794,7 @@ resize_frame_view(BeamformerFrameView *view, uv2 dim)
 	/* TODO(rnp): add some ID for the specific view here */
 	str8 label = str8("Frame View Texture");
 	vk_image_allocate(&view->colour_image, dim.w, dim.h, 1, 1, VulkanImageUsage_Colour,
-	                  VulkanUsageFlag_ImageSampling, &view->export_handle, label);
+	                  GPUUsageFlag_ImageSampling, &view->export_handle, label);
 
 	glMemoryObjectParameterivEXT(view->memory_object, GL_DEDICATED_MEMORY_OBJECT_EXT, (GLint []){1});
 
@@ -848,7 +848,7 @@ beamformer_ui_frame_view_copy_frame(BeamformerFrameView *new, BeamformerFrameVie
 
 	GPUBufferAllocateInfo allocate_info = {
 		.size  = frame_size,
-		.flags = VulkanUsageFlag_TransferDestination,
+		.flags = GPUUsageFlag_TransferDestination,
 		.label = stream_to_str8(&sb),
 	};
 	gpu_buffer_allocate(&new->copy_buffer, allocate_info);

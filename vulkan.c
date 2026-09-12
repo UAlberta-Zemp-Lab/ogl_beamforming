@@ -34,6 +34,8 @@ typedef enum {
 	VulkanMemoryKind_Count,
 } VulkanMemoryKind;
 
+typedef struct VulkanEntity VulkanEntity;
+
 typedef struct {
 	VkDeviceMemory    memory;
 	VkBuffer          buffer;
@@ -45,6 +47,10 @@ typedef struct {
 
 	// NOTE: only used when the buffer is backing a VulkanRenderModel.
 	VkIndexType       index_type;
+
+	// NOTE(rnp): only valid for buffer that will be written from the CPU and
+	// when the system needs to use a staging buffer rather than BAR access
+	VulkanEntity *next;
 } VulkanBuffer;
 
 typedef struct {
@@ -81,7 +87,6 @@ typedef enum {
 	VulkanEntityKind_Semaphore,
 } VulkanEntityKind;
 
-typedef struct VulkanEntity VulkanEntity;
 struct VulkanEntity {
 	VulkanEntity *   next;
 	VulkanEntityKind kind;
@@ -138,6 +143,7 @@ typedef struct {
 	struct {
 		u64             max_allocation_size;
 		u64             non_coherent_atom_size;
+		u64             memory_heap_sizes[VulkanMemoryKind_Count];
 		u8              gpu_heap_index;
 		i8              memory_type_indices[VulkanMemoryKind_Count];
 		b8              memory_host_coherent[VulkanMemoryKind_Count];
@@ -911,7 +917,8 @@ vk_allocate_memory(VkDeviceMemory *memory, u64 size, VulkanMemoryKind kind, VkMe
 		.pNext           = &memory_allocate_flags_info,
 	};
 
-	b32 result = vkAllocateMemory(vk->device, &memory_allocate_info, 0, memory) == VK_SUCCESS;
+	b32 result = size <= vk->memory_info.memory_heap_sizes[kind] &&
+	             vkAllocateMemory(vk->device, &memory_allocate_info, 0, memory) == VK_SUCCESS;
 	if (result) {
 		atomic_add_u64(&vk->gpu_info.gpu_heap_used, memory_allocate_info.allocationSize);
 
@@ -953,18 +960,19 @@ vk_index_size(VkIndexType type)
 }
 
 typedef struct {
-	GPUBuffer        *gpu_buffer;
-	u64               size;
-	VulkanUsageFlags  flags;
-	u32               queue_family_count;
-	u32               queue_family_indices[GPUTimeline_Count];
-	VkIndexType       index_type;
-	OSHandle         *export;
-	str8              label;
+	GPUBuffer     *gpu_buffer;
+	u64            size;
+	u64            single_transfer_size;
+	GPUUsageFlags  flags;
+	u32            queue_family_count;
+	u32            queue_family_indices[GPUTimeline_Count];
+	VkIndexType    index_type;
+	OSHandle      *export;
+	str8           label;
 } VulkanBufferAllocateInfo;
 
 function b32
-vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
+vk_buffer_allocate_common_base(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai, VulkanMemoryKind memory_kind)
 {
 	VulkanContext *vk = vulkan_context;
 
@@ -979,18 +987,22 @@ vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
 	u64 size = Min(ai->size, clamp_size);
 
 	VkBufferCreateInfo buffer_create_info = {
-		.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.usage       = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		.size        = size,
-		.sharingMode = ai->queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		.size  = size,
 		.queueFamilyIndexCount = ai->queue_family_count,
 		.pQueueFamilyIndices   = ai->queue_family_indices,
+		.sharingMode           = ai->queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT
+		                                                    : VK_SHARING_MODE_EXCLUSIVE,
 	};
 
-	if (ai->flags & VulkanUsageFlag_TransferSource)
+	if (ai->gpu_buffer)
+		buffer_create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+	if (ai->flags & (GPUUsageFlag_TransferSource|GPUUsageFlag_HostRead))
 		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-	if (ai->flags & VulkanUsageFlag_TransferDestination)
+	if (ai->flags & (GPUUsageFlag_TransferDestination|GPUUsageFlag_HostWrite))
 		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 	if (ai->index_type != VK_INDEX_TYPE_NONE_KHR)
@@ -1001,7 +1013,6 @@ vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
 		.handleTypes = OS_WINDOWS ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT
 		                          : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
 	};
-
 	if (ai->export) buffer_create_info.pNext = &external_memory_buffer_create_info;
 
 	vkCreateBuffer(vk->device, &buffer_create_info, 0, &vb->buffer);
@@ -1018,6 +1029,39 @@ vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
 		.buffer = vb->buffer,
 	};
 
+	b32 result = vk_allocate_memory(&vb->memory, size, memory_kind, ai->gpu_buffer ? VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT : 0,
+	                                &dedicated_allocate_info, ai->export);
+	if (result) {
+		vk_label_object(DEVICE_MEMORY, vb->memory, ai->label, str8("Memory"));
+
+		vb->memory_size = size;
+		vb->memory_kind = memory_kind;
+		vb->index_type  = ai->index_type;
+
+		if (ai->flags & GPUUsageFlag_HostReadWrite)
+			vkMapMemory(vk->device, vb->memory, 0, vb->memory_size, 0, &vb->host_pointer);
+		vkBindBufferMemory(vk->device, vb->buffer, vb->memory, 0);
+
+		if (ai->gpu_buffer) {
+			VkBufferDeviceAddressInfo buffer_device_address_info = {
+				.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = vb->buffer,
+			};
+			ai->gpu_buffer->gpu_pointer = vkGetBufferDeviceAddress(vk->device, &buffer_device_address_info);
+			ai->gpu_buffer->size        = size;
+		}
+	} else {
+		vkDestroyBuffer(vk->device, vb->buffer, 0);
+		vb->buffer = 0;
+	}
+	return result;
+}
+
+function b32
+vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
+{
+	VulkanContext *vk = vulkan_context;
+
 	/* NOTE(rnp): to create a CPU writable buffer:
 	 * 1. try to allocate and map the entire buffer
 	 *    - this may fail if the buffer is bigger than the BAR size
@@ -1027,30 +1071,44 @@ vk_buffer_allocate_common(VulkanBuffer *vb, VulkanBufferAllocateInfo *ai)
 	 *    for staging. If this happens in practice we should add
 	 *    the ability to import an existing external allocation
 	 */
-	b32 host_read_write = (ai->flags & VulkanUsageFlag_HostReadWrite) != 0;
-	vb->memory_kind = host_read_write ? VulkanMemoryKind_BAR : VulkanMemoryKind_Device;
+	u32 host_rw_flags = (ai->flags & GPUUsageFlag_HostReadWrite);
+	b32 result = vk_buffer_allocate_common_base(vb, ai, host_rw_flags ? VulkanMemoryKind_BAR : VulkanMemoryKind_Device);
+	if (!result && host_rw_flags) {
+		u32 transfer_queue_family = vk->queues[vk->queue_indices[VulkanQueueKind_Transfer]]->queue_family;
 
-	b32 result = 0;
-	// TODO(rnp): this may fail if the allocation is too big for the BAR size
-	// it needs to handled properly
-	if (vk_allocate_memory(&vb->memory, size, vb->memory_kind, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, &dedicated_allocate_info, ai->export)) {
-		result  = 1;
-		ai->gpu_buffer->size = size;
-		vb->memory_size = size;
+		ai->flags &= ~GPUUsageFlag_HostReadWrite;
+		b32 found = 0;
+		for EachElement(ai->queue_family_indices, it) {
+			if (ai->queue_family_indices[it] == transfer_queue_family) {
+				found = 1;
+				break;
+			}
+		}
+		if (!found) ai->queue_family_indices[ai->queue_family_count++] = transfer_queue_family;
 
-		vb->index_type = ai->index_type;
+		if (vk_buffer_allocate_common_base(vb, ai, VulkanMemoryKind_Device)) {
+			VulkanEntity *e   = vk_entity_allocate(VulkanEntityKind_Buffer);
+			VulkanBuffer *vsb = &e->as.buffer;
 
-		vk_label_object(DEVICE_MEMORY, vb->memory, ai->label, str8("Memory"));
+			u64 host_size = ai->single_transfer_size > 0 ? ai->single_transfer_size : vb->memory_size;
+			VulkanBufferAllocateInfo asi = {
+				.size                    = AlignUpPowerOfTwo(host_size, vk->memory_info.non_coherent_atom_size),
+				.index_type              = VK_INDEX_TYPE_NONE_KHR,
+				.flags                   = host_rw_flags,
+				.queue_family_count      = 1,
+				.queue_family_indices[0] = vk->queues[vk->queue_indices[VulkanQueueKind_Transfer]]->queue_family,
+			};
+			Temp scratch;
+			DeferLoop(take_lock(&vk->arena_lock, -1), release_lock(&vk->arena_lock))
+			DeferLoop(scratch = temp_begin(vk->arena), temp_end(scratch))
+			{
+				asi.label = push_str8_from_parts(vk->arena, str8("_"), ai->label, str8("Staging"));
+				result = vk_buffer_allocate_common_base(vsb, &asi, VulkanMemoryKind_Host);
+			}
 
-		if (host_read_write)
-			vkMapMemory(vk->device, vb->memory, 0, size, 0, &vb->host_pointer);
-
-		vkBindBufferMemory(vk->device, vb->buffer, vb->memory, 0);
-		VkBufferDeviceAddressInfo buffer_device_address_info = {
-			.sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = vb->buffer,
-		};
-		ai->gpu_buffer->gpu_pointer = vkGetBufferDeviceAddress(vk->device, &buffer_device_address_info);
+			if (result) vb->next = e;
+			else        vk_entity_release(e);
+		}
 	}
 	return result;
 }
@@ -1380,28 +1438,23 @@ vk_load_physical_device(Arena *arena, Stream *err)
 
 	for (u32 i = 0; i < bmp->memoryTypeCount; i++) {
 		if (bmp->memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-			assert(bmp->memoryTypes[i].heapIndex == vk->memory_info.gpu_heap_index);
+			u32 heap_index = bmp->memoryTypes[i].heapIndex;
+			assert(heap_index == vk->memory_info.gpu_heap_index);
 			vk->memory_info.memory_type_indices[VulkanMemoryKind_Device] = i;
+			vk->memory_info.memory_heap_sizes[VulkanMemoryKind_Device]   = bmp->memoryHeaps[heap_index].size;
 			break;
 		}
 	}
 
-	// TODO(rnp): it is possible that this isn't available. for devices like that we would need
-	// to copy into a staging buffer then DMA. For now that is unsupported.
 	u32 bar_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 	i32 bar_index = -1;
 	for (u32 i = 0; i < bmp->memoryTypeCount; i++) {
 		if ((bmp->memoryTypes[i].propertyFlags & bar_flags) == bar_flags) {
-			assert(bmp->memoryTypes[i].heapIndex == vk->memory_info.gpu_heap_index);
+			u32 heap_index = bmp->memoryTypes[i].heapIndex;
+			vk->memory_info.memory_heap_sizes[VulkanMemoryKind_BAR] = bmp->memoryHeaps[heap_index].size;
 			bar_index = (i32)i;
 			break;
 		}
-	}
-
-	// TODO(rnp): this shouldn't be fatal
-	if (bar_index == -1) {
-		stream_append_str8(err, vulkan_info("fatal error: GPU does not support host bar memory\n"));
-		fatal(stream_to_str8(err));
 	}
 
 	vk->memory_info.memory_type_indices[VulkanMemoryKind_BAR] = bar_index;
@@ -1410,15 +1463,19 @@ vk_load_physical_device(Arena *arena, Stream *err)
 	for (u32 i = 0; i < bmp->memoryTypeCount; i++) {
 		if ((bmp->memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0) {
 			if (bmp->memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+				u32 heap_index = bmp->memoryTypes[i].heapIndex;
 				vk->memory_info.memory_type_indices[VulkanMemoryKind_Host] = (i8)i;
+				vk->memory_info.memory_heap_sizes[VulkanMemoryKind_Host] = bmp->memoryHeaps[heap_index].size;
 				break;
 			}
 		}
 	}
 
 	// NOTE(rnp): some devices are fully unified so the only memory type is BAR memory
-	if (vk->memory_info.memory_type_indices[VulkanMemoryKind_Host] == -1 && bar_index != -1)
+	if (vk->memory_info.memory_type_indices[VulkanMemoryKind_Host] == -1 && bar_index != -1) {
 		vk->memory_info.memory_type_indices[VulkanMemoryKind_Host] = bar_index;
+		vk->memory_info.memory_heap_sizes[VulkanMemoryKind_Host] = vk->memory_info.memory_heap_sizes[VulkanMemoryKind_BAR];
+	}
 
 	if (vk->memory_info.memory_type_indices[VulkanMemoryKind_Host] == -1) {
 		stream_append_str8(err, vulkan_info("fatal error: vulkan driver does not provide host visible memory\n"));
@@ -1893,8 +1950,12 @@ vk_vulkan_buffer_release(VulkanBuffer *vb)
 DEBUG_IMPORT void
 gpu_buffer_release(GPUBuffer *b)
 {
-	if (b->handle.value)
-		vk_vulkan_buffer_release(vk_entity_data(b->handle.value, VulkanEntityKind_Buffer));
+	if (b->handle.value) {
+		VulkanBuffer *vb = vk_entity_data(b->handle.value, VulkanEntityKind_Buffer);
+		if (vb->next)
+			vk_vulkan_buffer_release(vk_entity_data((u64)vb->next, VulkanEntityKind_Buffer));
+		vk_vulkan_buffer_release(vb);
+	}
 	zero_struct(b);
 }
 
@@ -1943,11 +2004,8 @@ vk_buffer_needs_sync(GPUBuffer *b)
 	b32 result = 0;
 	if (b->handle.value) {
 		VulkanBuffer *vb = vk_entity_data(b->handle.value, VulkanEntityKind_Buffer);
-
-		// TODO(rnp): not correct check. need to check if we used transfer queue
-		result = vb->memory_kind != VulkanMemoryKind_BAR;
+		result = vb->next != 0;
 	}
-
 	return result;
 }
 
@@ -1957,6 +2015,27 @@ gpu_round_up_to_sync_size(u64 size, u64 min)
 	i64 round  = (i64)Max(min, vulkan_context->memory_info.non_coherent_atom_size);
 	u64 result = (u64)round_up_to((i64)size, round);
 	return result;
+}
+
+function void
+vk_command_copy_buffer(VkCommandBuffer cb, VkBuffer db, u64 destination_offset, VkBuffer sb, u64 source_offset, u64 size)
+{
+	VkBufferCopy2 buffer_copy = {
+		.sType     = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+		.srcOffset = source_offset,
+		.dstOffset = destination_offset,
+		.size      = size,
+	};
+
+	VkCopyBufferInfo2 copy_buffer_info = {
+		.sType       = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+		.srcBuffer   = sb,
+		.dstBuffer   = db,
+		.regionCount = 1,
+		.pRegions    = &buffer_copy,
+	};
+
+	vkCmdCopyBuffer2(cb, &copy_buffer_info);
 }
 
 function force_inline void
@@ -2030,12 +2109,53 @@ vk_buffer_buffer_copy(VulkanBuffer *destination, VulkanBuffer *source, u64 desti
 				assert(vk->memory_info.memory_host_coherent[destination->memory_kind]);
 			#endif
 		}break;
+
+		case VulkanMemoryKind_Device:{
+			VulkanBuffer *db = vk_entity_data((u64)destination->next, VulkanEntityKind_Buffer);
+			assert(db->memory_size <= size);
+			void *dest = (u8 *)db->host_pointer;
+			void *src  = (u8 *)source->host_pointer + source_offset;
+			// NOTE(rnp): don't trash the CPU cache for large data stores
+			if (non_temporal) memory_copy_non_temporal(dest, src, size);
+			else              memory_copy(dest, src, size);
+			store_fence();
+
+			GPUCommandList cb = gpu_command_list_begin(GPUTimeline_Transfer);
+			vk_command_copy_buffer(vk_command_buffer(cb), destination->buffer, destination_offset, db->buffer, 0, size);
+			u64 wait_value = gpu_command_list_end(cb, (VulkanHandle){0}, (VulkanHandle){0});
+			// TODO(rnp): asynchronous transfers
+			gpu_host_wait_timeline(GPUTimeline_Transfer, wait_value, -1ULL);
+		}break;
+
 		InvalidDefaultCase;
 
 		}
 	}break;
 
-	// TODO(rnp): use transfer queue when not mapped
+	case VulkanMemoryKind_Device:{
+		switch (destination->memory_kind) {
+		// NOTE(rnp): only host memory is allowed for destination here
+		InvalidDefaultCase;
+		case VulkanMemoryKind_Host:{
+			VulkanBuffer *sb = vk_entity_data((u64)source->next, VulkanEntityKind_Buffer);
+
+			assert(sb->memory_size <= size);
+
+			GPUCommandList cb = gpu_command_list_begin(GPUTimeline_Transfer);
+			vk_command_copy_buffer(vk_command_buffer(cb), sb->buffer, 0, source->buffer, source_offset, size);
+			u64 wait_value = gpu_command_list_end(cb, (VulkanHandle){0}, (VulkanHandle){0});
+			// TODO(rnp): asynchronous transfers
+			gpu_host_wait_timeline(GPUTimeline_Transfer, wait_value, -1ULL);
+
+			void *dest = (u8 *)destination->host_pointer + destination_offset;
+			void *src  = (u8 *)sb->host_pointer;
+			// NOTE(rnp): don't trash the CPU cache for large data stores
+			if (non_temporal) memory_copy_non_temporal(dest, src, size);
+			else              memory_copy(dest, src, size);
+		}break;
+		}
+	}break;
+
 	InvalidDefaultCase;
 	}
 }
@@ -2090,7 +2210,7 @@ vk_render_model_allocate(GPUBuffer *model, void *indices, u64 index_count, u64 m
 	VulkanBufferAllocateInfo vulkan_buffer_allocate_info = {
 		.gpu_buffer              = model,
 		.size                    = (u64)size,
-		.flags                   = VulkanUsageFlag_HostReadWrite,
+		.flags                   = GPUUsageFlag_HostWrite,
 		.index_type              = index_type,
 		.label                   = label,
 		.queue_family_count      = 1,
@@ -2144,7 +2264,7 @@ vk_image_release(GPUImage *image)
 
 DEBUG_IMPORT void
 vk_image_allocate(GPUImage *image, u32 width, u32 height, u32 mips, u32 samples,
-                  VulkanImageUsage usage, VulkanUsageFlags flags, OSHandle *export, str8 label)
+                  VulkanImageUsage usage, GPUUsageFlags flags, OSHandle *export, str8 label)
 {
 	assert(IsPowerOfTwo(samples));
 
@@ -2185,9 +2305,9 @@ vk_image_allocate(GPUImage *image, u32 width, u32 height, u32 mips, u32 samples,
 	usage = Clamp((u32)usage, 0, VulkanImageUsage_Count);
 	VkImageUsageFlagBits usage_flags = usage_extra_bit_map[usage];
 
-	if (flags & VulkanUsageFlag_ImageSampling)       usage_flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
-	if (flags & VulkanUsageFlag_TransferSource)      usage_flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-	if (flags & VulkanUsageFlag_TransferDestination) usage_flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	if (flags & GPUUsageFlag_ImageSampling)       usage_flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+	if (flags & GPUUsageFlag_TransferSource)      usage_flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	if (flags & GPUUsageFlag_TransferDestination) usage_flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	u32 queue_family = vk->queues[VulkanQueueKind_Graphics]->queue_family;
 	VkImageCreateInfo image_create_info = {
@@ -2782,26 +2902,9 @@ gpu_command_copy_buffer(GPUCommandList command,
                         u64 size)
 {
 	if (command.value && destination->handle.value && source->handle.value) {
-		VkCommandBuffer cmd = vk_command_buffer(command);
 		VulkanBuffer *db = vk_entity_data(destination->handle.value, VulkanEntityKind_Buffer);
 		VulkanBuffer *sb = vk_entity_data(source->handle.value,      VulkanEntityKind_Buffer);
-
-		VkBufferCopy2 buffer_copy = {
-			.sType     = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-			.srcOffset = source_offset,
-			.dstOffset = destination_offset,
-			.size      = size,
-		};
-
-		VkCopyBufferInfo2 copy_buffer_info = {
-			.sType       = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-			.srcBuffer   = sb->buffer,
-			.dstBuffer   = db->buffer,
-			.regionCount = 1,
-			.pRegions    = &buffer_copy,
-		};
-
-		vkCmdCopyBuffer2(cmd, &copy_buffer_info);
+		vk_command_copy_buffer(vk_command_buffer(command), db->buffer, destination_offset, sb->buffer, source_offset, size);
 	}
 }
 

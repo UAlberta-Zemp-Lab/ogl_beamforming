@@ -47,15 +47,18 @@ typedef enum {
 } VulkanImageUsage;
 
 typedef enum {
-	VulkanUsageFlag_ImageSampling       = 1 << 0,
-	VulkanUsageFlag_HostReadWrite       = 1 << 1, // NOTE: not valid on images
+	GPUUsageFlag_ImageSampling       = 1 << 0,
+	GPUUsageFlag_HostRead            = 1 << 1, // NOTE: not valid on images
+	GPUUsageFlag_HostWrite           = 1 << 2, // NOTE: not valid on images
 	/* NOTE: uses:
 	 * - image-image copy operations
 	 * - buffer-buffer copy operations
 	 */
-	VulkanUsageFlag_TransferSource      = 1 << 2,
-	VulkanUsageFlag_TransferDestination = 1 << 3,
-} VulkanUsageFlags;
+	GPUUsageFlag_TransferSource      = 1 << 3,
+	GPUUsageFlag_TransferDestination = 1 << 4,
+
+	GPUUsageFlag_HostReadWrite       = (GPUUsageFlag_HostRead|GPUUsageFlag_HostWrite),
+} GPUUsageFlags;
 
 typedef struct {
 	VulkanShaderKind kind;
@@ -112,8 +115,14 @@ typedef struct {
 } GPUInfo;
 
 typedef struct {
+	GPUUsageFlags     flags;
 	i64               size;
-	VulkanUsageFlags  flags;
+
+	// NOTE(rnp): when the buffer is used as a destination for CPU->GPU transfers
+	// and the GPU doesn't support full UMA/ReBAR access this indicates the maximum
+	// size the CPU will try to transfer in one go. This can be used to reduce to
+	// reduce CPU memory overhead for large GPU side buffers
+	i64               single_transfer_size;
 
 	// NOTE(rnp): only required if buffer will be used on multiple timelines
 	u32               timeline_count;
@@ -145,7 +154,7 @@ DEBUG_IMPORT void gpu_buffer_range_download(void *output, GPUBuffer *, u64 sourc
 DEBUG_IMPORT u64  gpu_round_up_to_sync_size(u64, u64 min);
 
 // NOTE: images are 2D only, any other use case should just use a buffer and index in the shader
-DEBUG_IMPORT void vk_image_allocate(GPUImage *, u32 width, u32 height, u32 mips, u32 samples, VulkanImageUsage usage, VulkanUsageFlags flags, OSHandle *export, str8 label);
+DEBUG_IMPORT void vk_image_allocate(GPUImage *, u32 width, u32 height, u32 mips, u32 samples, VulkanImageUsage usage, GPUUsageFlags flags, OSHandle *export, str8 label);
 DEBUG_IMPORT void vk_image_release(GPUImage *);
 
 DEBUG_IMPORT void vk_render_model_allocate(GPUBuffer *, void *indices, u64 index_count, u64 model_size, str8 label);
