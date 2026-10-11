@@ -332,6 +332,14 @@ beamformer_filter_create(Arena *arena, BeamformerFilterParameters fp)
 		}
 	}break;
 
+	case BeamformerFilterKind_MatchedBarker:{
+		typeof(fp.barker) *barker = &fp.barker;
+		result->data = barker_code_filter(arena, barker->code_length, barker->chip_duration,
+		                                  barker->polarity, barker->unipolar, fp.sampling_frequency,
+		                                  &result->length);
+		result->time_delay = real_filter_first_moment(result->data, result->length, fp.sampling_frequency);
+	}break;
+
 	InvalidDefaultCase;
 	}
 
