@@ -796,6 +796,42 @@ rf_chirp(Arena *arena, f32 min_frequency, f32 max_frequency, f32 sampling_freque
 	return result;
 }
 
+function f32 *
+barker_code_filter(Arena *arena, u32 code_length, f32 chip_duration, f32 polarity,
+                   b32 unipolar, f32 sampling_frequency, i32 *length)
+{
+	read_only f32 code_2[]  = {1, 1};
+	read_only f32 code_3[]  = {1, 1, -1};
+	read_only f32 code_4[]  = {1, 1, -1, 1};
+	read_only f32 code_5[]  = {1, 1, 1, -1, 1};
+	read_only f32 code_7[]  = {1, 1, 1, -1, -1, 1, -1};
+	read_only f32 code_11[] = {1, 1, 1, -1, -1, -1, 1, -1, -1, 1, -1};
+	read_only f32 code_13[] = {1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1};
+	read_only f32 *code = 0;
+
+	switch (code_length) {
+	case 2:  code = code_2;  break;
+	case 3:  code = code_3;  break;
+	case 4:  code = code_4;  break;
+	case 5:  code = code_5;  break;
+	case 7:  code = code_7;  break;
+	case 11: code = code_11; break;
+	case 13: code = code_13; break;
+	default: assert(!"Unsupported Barker code length"); break;
+	}
+
+	i32 samples_per_chip = Max((i32)(chip_duration * sampling_frequency + 0.5f), 1);
+	*length = (i32)code_length * samples_per_chip;
+	f32 *result = push_array(arena, f32, *length);
+	for (i32 i = 0; i < *length; i++) {
+		i32 chip = i / samples_per_chip;
+		f32 symbol = code[code_length - chip - 1];
+		if (unipolar && symbol < 0) symbol = 0;
+		result[i] = polarity * symbol;
+	}
+	return result;
+}
+
 function v2 *
 baseband_chirp(Arena *arena, f32 min_frequency, f32 max_frequency, f32 sampling_frequency,
                i32 length, b32 reverse, f32 scale)

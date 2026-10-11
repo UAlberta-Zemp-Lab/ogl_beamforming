@@ -103,8 +103,9 @@ typedef enum {
 } BeamformerAcquisitionKind;
 
 typedef enum {
-	BeamformerFilterKind_Kaiser       = 0,
-	BeamformerFilterKind_MatchedChirp = 1,
+	BeamformerFilterKind_Kaiser        = 0,
+	BeamformerFilterKind_MatchedChirp  = 1,
+	BeamformerFilterKind_MatchedBarker = 2,
 	BeamformerFilterKind_Count,
 } BeamformerFilterKind;
 
@@ -343,12 +344,20 @@ typedef struct {
 } BeamformerMatchedChirpFilterParameters;
 
 typedef struct {
+	u32 code_length;
+	f32 chip_duration;
+	f32 polarity;
+	b32 unipolar;
+} BeamformerMatchedBarkerFilterParameters;
+
+typedef struct {
 	BeamformerFilterKind kind;
 	f32                  sampling_frequency;
 	b32                  complex;
 	union {
-		BeamformerKaiserFilterParameters       kaiser;
-		BeamformerMatchedChirpFilterParameters matched_chirp;
+		BeamformerKaiserFilterParameters        kaiser;
+		BeamformerMatchedChirpFilterParameters  matched_chirp;
+		BeamformerMatchedBarkerFilterParameters barker;
 	};
 } BeamformerFilterParameters;
 
