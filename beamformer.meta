@@ -117,8 +117,9 @@
 
 @Table([name name_lower]) FilterKindTable
 {
-	[Kaiser       kaiser       ]
-	[MatchedChirp matched_chirp]
+	[Kaiser        kaiser       ]
+	[MatchedChirp  matched_chirp]
+	[MatchedBarker barker       ]
 }
 @Expand(FilterKindTable) @Enumeration(`$(name)`) FilterKind
 
@@ -138,10 +139,20 @@
 }
 @Library @Struct MatchedChirpFilterParameters
 
+@Struct MatchedBarkerFilterParameters
+{
+	[code_length   U32]
+	[chip_duration F32]
+	[polarity      F32]
+	[unipolar      B32]
+}
+@Library @Struct MatchedBarkerFilterParameters
+
 @Table([type c_member m_member]) FilterParametersTable
 {
 	[KaiserFilterParameters       kaiser        Kaiser      ]
 	[MatchedChirpFilterParameters matched_chirp MatchedChirp]
+	[MatchedBarkerFilterParameters barker       MatchedBarker]
 }
 @Expand(FilterParametersTable) @Union([`$(c_member)` `$(type)`]) FilterParametersUnion
 @Expand(FilterParametersTable) @Union([`$(m_member)` `$(type)`]) FilterParametersUnionMATLAB
