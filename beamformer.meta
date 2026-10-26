@@ -70,6 +70,9 @@
 {
 	Sine
 	Chirp
+	UnipolarBurst
+	UnipolarBarker
+	BipolarBarker
 }
 
 @Enumeration InterpolationMode
@@ -126,10 +129,36 @@
 }
 @Library @Struct ChirpParameters
 
+@Struct UnipolarBurstParameters
+{
+	[polarity      F32]
+	[frequency     F32]
+	[cycles        F32]
+	[duty_cycle    F32]
+}
+@Library @Struct UnipolarBurstParameters
+
+@Struct UnipolarBarkerParameters
+{
+	[chip_parameters UnipolarBurstParameters]
+	[code_length     U32                    ]
+}
+@Library @Struct UnipolarBarkerParameters
+
+@Struct BipolarBarkerParameters
+{
+	[chip_parameters SineParameters]
+	[code_length     U32           ]
+}
+@Library @Struct BipolarBarkerParameters
+
 @Table([type c_member m_member]) EmissionParametersTable
 {
-	[SineParameters  sine  Sine ]
-	[ChirpParameters chirp Chirp]
+	[SineParameters           sine            Sine          ]
+	[ChirpParameters          chirp           Chirp         ]
+	[UnipolarBurstParameters  unipolar_burst  UnipolarBurst ]
+	[UnipolarBarkerParameters unipolar_barker UnipolarBarker]
+	[BipolarBarkerParameters  bipolar_barker  BipolarBarker ]
 }
 @Expand(EmissionParametersTable) @Union([`$(c_member)` `$(type)`]) EmissionParametersUnion
 @Expand(EmissionParametersTable) @Union([`$(m_member)` `$(type)`]) EmissionParametersUnionMATLAB

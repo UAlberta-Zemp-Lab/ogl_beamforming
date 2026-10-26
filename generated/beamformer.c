@@ -65,8 +65,11 @@ typedef enum {
 } BeamformerContrastMode;
 
 typedef enum {
-	BeamformerEmissionKind_Sine  = 0,
-	BeamformerEmissionKind_Chirp = 1,
+	BeamformerEmissionKind_Sine           = 0,
+	BeamformerEmissionKind_Chirp          = 1,
+	BeamformerEmissionKind_UnipolarBurst  = 2,
+	BeamformerEmissionKind_UnipolarBarker = 3,
+	BeamformerEmissionKind_BipolarBarker  = 4,
 	BeamformerEmissionKind_Count,
 } BeamformerEmissionKind;
 
@@ -324,10 +327,30 @@ typedef struct {
 } BeamformerChirpParameters;
 
 typedef struct {
+	f32 polarity;
+	f32 frequency;
+	f32 cycles;
+	f32 duty_cycle;
+} BeamformerUnipolarBurstParameters;
+
+typedef struct {
+	BeamformerUnipolarBurstParameters chip_parameters;
+	u32                               code_length;
+} BeamformerUnipolarBarkerParameters;
+
+typedef struct {
+	BeamformerSineParameters chip_parameters;
+	u32                      code_length;
+} BeamformerBipolarBarkerParameters;
+
+typedef struct {
 	BeamformerEmissionKind kind;
 	union {
-		BeamformerSineParameters  sine;
-		BeamformerChirpParameters chirp;
+		BeamformerSineParameters           sine;
+		BeamformerChirpParameters          chirp;
+		BeamformerUnipolarBurstParameters  unipolar_burst;
+		BeamformerUnipolarBarkerParameters unipolar_barker;
+		BeamformerBipolarBarkerParameters  bipolar_barker;
 	};
 } BeamformerEmissionParameters;
 
@@ -1001,6 +1024,9 @@ read_only str8 beamformer_view_plane_tag_strings[] = {
 read_only str8 beamformer_emission_kind_strings[] = {
 	str8_comp("Sine"),
 	str8_comp("Chirp"),
+	str8_comp("UnipolarBurst"),
+	str8_comp("UnipolarBarker"),
+	str8_comp("BipolarBarker"),
 };
 
 read_only str8 beamformer_interpolation_mode_strings[] = {
