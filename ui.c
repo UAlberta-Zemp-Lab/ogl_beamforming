@@ -3365,6 +3365,70 @@ ui_build_compute_stats(BeamformerComputePlan *cp, f32 broken_shader_t, Beamforme
 }
 
 function void
+ui_build_sine_columns(BeamformerEmissionParameters *ep, 
+	UINode *label_column, UINode *value_column, UINode *unit_column, u32 depth) {
+
+	Stream sb = arena_stream(ui_build_arena());
+	for (; depth > 0; depth--) {
+		stream_append_str8(&sb, str8("    "));
+	}
+	str8 indent = arena_stream_commit(ui_build_arena(), &sb);
+
+	UIParent(label_column)
+	{
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Cycles")));
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Frequency")));
+	}
+
+	UIParent(value_column)
+	{
+		ui_labelf("%0.2f###sine_cycles", ep->sine.cycles);
+		ui_labelf("%0.2f###sine_freq", ep->sine.frequency * 1e-6f);
+	}
+
+	UIParent(unit_column)
+	{
+		UIPrefHeight(ui_em(1.0f, 1.0f)) ui_spacer(0);
+		ui_label(str8("[MHz]###sine_freq"));
+	}
+}
+
+function void
+ui_build_burst_columns(BeamformerEmissionParameters *ep, 
+	UINode *label_column, UINode *value_column, UINode *unit_column, u32 depth) {
+	
+	Stream sb = arena_stream(ui_build_arena());
+	for (; depth > 0; depth--) {
+		stream_append_str8(&sb, str8("    "));
+	}
+	str8 indent = arena_stream_commit(ui_build_arena(), &sb);
+	
+	UIParent(label_column)
+	{
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Polarity")));
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Frequency")));
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Cycles")));
+		ui_label(push_str8_from_parts(ui_build_arena(), str8(""), indent, str8("Duty Cycle")));
+	}
+
+	UIParent(value_column)
+	{
+		ui_labelf("%0.0f###burst_polarity", ep->unipolar_burst.polarity);
+		ui_labelf("%0.2f###burst_freq", ep->unipolar_burst.frequency * 1e-6f);
+		ui_labelf("%0.2f###burst_cycles", ep->unipolar_burst.cycles);
+		ui_labelf("%0.2f###burst_duty", ep->unipolar_burst.duty_cycle);
+	}
+
+	UIParent(unit_column)
+	{
+		UIPrefHeight(ui_em(1.0f, 1.0f)) ui_spacer(0);
+		ui_label(str8("[MHz]###burst_freq"));
+		UIPrefHeight(ui_em(1.0f, 1.0f)) ui_spacer(0);
+		ui_label(str8("[MHz]###burst_duty"));
+	}
+}
+
+function void
 ui_build_parameters_listing(BeamformerUIPanel *panel)
 {
 	BeamformerUI *ui = ui_context;
@@ -3440,23 +3504,7 @@ ui_build_parameters_listing(BeamformerUIPanel *panel)
 				if (valid && panel->u.parameter_listing.expand_emission) {
 					switch (ep->kind) {
 					case BeamformerEmissionKind_Sine:{
-						UIParent(label_column)
-						{
-							ui_label(str8("    Cycles"));
-							ui_label(str8("    Frequency"));
-						}
-
-						UIParent(value_column)
-						{
-							ui_labelf("%0.2f###sine_cycles", ep->sine.cycles);
-							ui_labelf("%0.2f###sine_freq", ep->sine.frequency * 1e-6f);
-						}
-
-						UIParent(unit_column)
-						{
-							UIPrefHeight(ui_em(1.0f, 1.0f)) ui_spacer(0);
-							ui_label(str8("[MHz]###sine_freq"));
-						}
+						ui_build_sine_columns(ep, label_column, value_column, unit_column, 1);
 					}break;
 
 					case BeamformerEmissionKind_Chirp:{
@@ -3481,6 +3529,44 @@ ui_build_parameters_listing(BeamformerUIPanel *panel)
 							ui_label(str8("[MHz]###chirp_max"));
 						}
 					}break;
+
+
+					case BeamformerEmissionKind_UnipolarBurst:{
+						ui_build_burst_columns(ep, label_column, value_column, unit_column, 1);
+					}break;
+
+					case BeamformerEmissionKind_UnipolarBarker:
+					case BeamformerEmissionKind_BipolarBarker:{
+						UIParent(label_column)
+						{
+							ui_label(str8("    Code Length"));
+						}
+
+						UIParent(value_column)
+						{
+							ui_labelf("%u###barker_code_length", ep->kind == BeamformerEmissionKind_UnipolarBarker 
+								? ep->unipolar_barker.code_length : ep->bipolar_barker.code_length);
+						}
+
+						UIParent(unit_column)
+						{
+						}
+						
+						UIParent(label_column)
+						{
+							UISignal signal = ui_label_button(str8("    Chip"));
+							if ui_pressed(signal)
+								panel->u.parameter_listing.expand_chip ^= 1u;
+						}
+						UIParent(unit_column)  UIPrefHeight(ui_em(1.0f, 1.0f)) ui_spacer(0);
+						UIParent(value_column) ui_label(beamformer_emission_kind_strings[ep->kind == BeamformerEmissionKind_UnipolarBarker ? BeamformerEmissionKind_UnipolarBurst : BeamformerEmissionKind_Sine]);
+						if (panel->u.parameter_listing.expand_chip) {
+							if (ep->kind == BeamformerEmissionKind_UnipolarBarker)
+								ui_build_burst_columns(ep, label_column, value_column, unit_column, 2);
+							else
+								ui_build_sine_columns(ep, label_column, value_column, unit_column, 2);
+						}
+					}
 
 					InvalidDefaultCase;
 					}

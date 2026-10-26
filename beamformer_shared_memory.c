@@ -1,5 +1,5 @@
 /* See LICENSE for license details. */
-#define BEAMFORMER_SHARED_MEMORY_VERSION (37UL)
+#define BEAMFORMER_SHARED_MEMORY_VERSION (38UL)
 
 typedef enum {
 	BeamformerWorkKind_Compute,

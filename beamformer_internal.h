@@ -602,6 +602,7 @@ struct BeamformerUIPanel {
 		struct {
 			u32 parameter_block;
 			b8  expand_emission;
+			b8  expand_chip;
 			b8  expand_coordinate[2];
 		} parameter_listing;
 
